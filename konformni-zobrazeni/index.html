@@ -65,6 +65,37 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--ink); }
   background: var(--surface); border-right: 1px solid var(--hair);
 }
 .brand { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.brand-actions { display: flex; gap: 6px; flex: none; }
+
+/* návod */
+.tour-dim { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 40; pointer-events: none; }
+.tour-shade { fill: rgba(4, 5, 8, 0.58); }
+.tour-ring { fill: none; stroke: var(--ink); stroke-width: 2; animation: tourPulse 1.6s ease-in-out infinite; }
+@keyframes tourPulse { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: 0.25; } }
+.tour-card {
+  position: fixed; z-index: 41; width: min(286px, calc(100vw - 24px)); padding: 16px 16px 14px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--ink); border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; gap: 8px;
+}
+.tour-count { font: 500 12px var(--font-mono); color: var(--muted); }
+.tour-card h2 { margin: 0; font: 500 19px/1.25 var(--font-math); }
+.tour-card p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.tour-task { padding: 8px 10px; border-radius: 6px; background: var(--panel); border: 1px solid var(--hair); font-weight: 500; }
+.tour-task::before { content: "▸ "; color: var(--muted); }
+.tour-task.done { border-color: var(--good); }
+.tour-task.done::before { content: "✓ "; color: var(--good); }
+.tour-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.tour-actions .play { flex: none; padding: 7px 14px; font-size: 14px; }
+.tour-end { margin-left: auto; }
+.tour-modal { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; padding: 16px; background: rgba(4, 5, 8, 0.6); }
+.tour-modal-card {
+  width: min(420px, 100%); padding: 22px; border-radius: 10px; background: var(--surface); border: 1px solid var(--hair);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 12px;
+}
+.tour-modal-card h2 { margin: 0; font: 500 22px/1.2 var(--font-math); }
+.tour-modal-card p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .tour-ring { animation: none; } }
+@media (max-width: 700px) { .tour-card { left: 12px !important; right: 12px; top: auto !important; bottom: 12px; width: auto; } }
 .back { display: inline-block; margin-bottom: 8px; font-size: 12.5px; color: var(--muted); text-decoration: none; }
 .back:hover { color: var(--ink); }
 .brand h1 { margin: 0; font: 500 23px/1.15 var(--font-math); letter-spacing: 0.005em; text-wrap: balance; }
@@ -193,7 +224,10 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
         <h1>Konformní zobrazení</h1>
         <p class="thm"><b>f</b> holomorfní a <b>f′(z₀) ≠ 0</b> ⇒ <b>f</b> v bodě <b>z₀</b> zachovává úhly</p>
       </div>
-      <button id="themeBtn" class="icon-btn" type="button" title="Přepnout světlý a tmavý režim" aria-label="Přepnout světlý a tmavý režim">◐</button>
+      <div class="brand-actions">
+        <button id="tourBtn" class="btn" type="button" title="Krátký návod, který tě provede základy">Návod</button>
+        <button id="themeBtn" class="icon-btn" type="button" title="Přepnout světlý a tmavý režim" aria-label="Přepnout světlý a tmavý režim">◐</button>
+      </div>
     </header>
 
     <section>
@@ -297,6 +331,34 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
       <div class="canvas-wrap"><canvas id="cR" aria-label="Rovina w, obraz pod funkcí"></canvas><div class="t-badge" id="tBadge">t = 0,00</div></div>
     </div>
   </main>
+</div>
+
+<!-- návod: ztmavení s okny na zvýrazněná místa, karta s krokem a uvítací okno -->
+<svg class="tour-dim" id="tourDim" hidden aria-hidden="true">
+  <defs><mask id="tourMask"><rect width="100%" height="100%" fill="white"/><g id="tourHoles"></g></mask></defs>
+  <rect class="tour-shade" width="100%" height="100%" mask="url(#tourMask)"/>
+  <g id="tourRings"></g>
+</svg>
+<div class="tour-card" id="tourCard" role="dialog" aria-labelledby="tourTitle" aria-live="polite" hidden>
+  <div class="tour-count" id="tourCount"></div>
+  <h2 id="tourTitle"></h2>
+  <p id="tourText"></p>
+  <p class="tour-task" id="tourTask"></p>
+  <div class="tour-actions">
+    <button class="play tour-next" id="tourNext" type="button">Další</button>
+    <button class="btn" id="tourSkip" type="button">Přeskočit krok</button>
+    <button class="btn tour-end" id="tourEnd" type="button">Ukončit návod</button>
+  </div>
+</div>
+<div class="tour-modal" id="tourWelcome" hidden>
+  <div class="tour-modal-card" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+    <h2 id="welcomeTitle"></h2>
+    <p id="welcomeText"></p>
+    <div class="tour-actions">
+      <button class="play" id="welcomeStart" type="button"></button>
+      <button class="btn" id="welcomeSkip" type="button"></button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -622,11 +684,12 @@ function computeTol() {
   L.bad = bad;
 }
 
-// vzorkuje cestu P(s), s ∈ [0, 1], a zjemňuje tam, kde se obraz rychle mění nebo zatáčí;
+// vzorkuje cestu P(s), s ∈ [0, 1] (funkcí G, jinak aktuální f) a zjemňuje tam, kde se obraz rychle mění nebo zatáčí;
 // obraz leží na lomené čáře s odchylkou pod čtvrt pixelu, takže se obrazy, které se mají krýt, opravdu kryjí
-function samplePath(P, N0) {
+function samplePath(P, N0, G) {
+  const ev = G ? (x, y) => G([x, y]) : F;
   const zs = [], fs = [], tol2 = state.tol * state.tol, dev2 = (state.tol / 12) ** 2;
-  const p0 = P(0); let f0 = F(p0[0], p0[1]);
+  const p0 = P(0); let f0 = ev(p0[0], p0[1]);
   zs.push(p0[0], p0[1]); fs.push(f0[0], f0[1]);
   function rec(sa, fa, sb, fb, d) {
     const fin = isFinite(fa[0]) && isFinite(fa[1]) && isFinite(fb[0]) && isFinite(fb[1]);
@@ -636,7 +699,7 @@ function samplePath(P, N0) {
       if (d2 <= tol2) {
         // krátký úsek ještě zjemnit, když jeho střed neleží na tětivě
         if (d >= 10 || zs.length > 40000) return;
-        const sm = (sa + sb) / 2, pm = P(sm), fm = F(pm[0], pm[1]);
+        const sm = (sa + sb) / 2, pm = P(sm), fm = ev(pm[0], pm[1]);
         const ex = fm[0] - (fa[0] + fb[0]) / 2, ey = fm[1] - (fa[1] + fb[1]) / 2;
         if (!(ex * ex + ey * ey > dev2)) return;
         rec(sa, fa, sm, fm, d + 1);
@@ -652,13 +715,13 @@ function samplePath(P, N0) {
       return;
     }
     if (!fin && d >= 5) return;
-    const sm = (sa + sb) / 2, pm = P(sm), fm = F(pm[0], pm[1]);
+    const sm = (sa + sb) / 2, pm = P(sm), fm = ev(pm[0], pm[1]);
     rec(sa, fa, sm, fm, d + 1);
     zs.push(pm[0], pm[1]); fs.push(fm[0], fm[1]);
     rec(sm, fm, sb, fb, d + 1);
   }
   for (let k = 1; k <= N0; k++) {
-    const s0 = (k - 1) / N0, s1 = k / N0, p1 = P(s1), f1 = F(p1[0], p1[1]);
+    const s0 = (k - 1) / N0, s1 = k / N0, p1 = P(s1), f1 = ev(p1[0], p1[1]);
     rec(s0, f0, s1, f1, 0);
     zs.push(p1[0], p1[1]); fs.push(f1[0], f1[1]);
     f0 = f1;
@@ -784,6 +847,7 @@ function checkHolo() {
     if (Math.abs(J[0] - J[3]) + Math.abs(J[1] + J[2]) <= 1e-5 * nrm + 1e-9) ok++;
   }
   const fr = tot ? ok / tot : 1, el = $('#holo'), partial = defined < 0.97 * all;
+  state.partial = partial;
   state.holo = fr >= 0.95 ? (partial ? 'warn' : 'good') : fr <= 0.05 ? 'bad' : 'warn';
   el.className = 'badge ' + state.holo;
   el.textContent = fr >= 0.95 ? (partial ? 'Holomorfní tam, kde je definovaná. Na zbytku oblasti definovaná není.' : 'Holomorfní. Úhly drží všude, kde f′ ≠ 0.')
@@ -815,7 +879,7 @@ function recomputeAll() {
   for (const c of state.curves) computeCurve(c);
   computeIntersections();
   for (const pr of state.probes) fillFData(pr, [pr.a, pr.b]);
-  checkHolo(); computeImgBox(); requestDraw();
+  checkHolo(); computeEdge(); computeImgBox(); requestDraw();
 }
 
 // ---------- pohledy ----------
@@ -1030,6 +1094,7 @@ function drawPanel(ctx, sz, v, t, side) {
     ctx.globalAlpha = 1;
     if (side === 'L' && state.sel === 'grid') drawGridSelection(ctx, ox, oy, s);
   }
+  drawEdge(ctx, t, ox, oy, s, brk2);
 
   for (const c of state.curves) {
     ctx.beginPath(); tracePath(ctx, c.z, c.f, t, ox, oy, s, brk2, false, side === 'R' && ext && c.gr, e);
@@ -1156,7 +1221,7 @@ function frame() {
     lastTs = now;
     state.u = Math.min(1, state.u + dt / state.dur);
     state.t = ease(state.u);
-    if (state.u >= 1) { state.playing = false; state.t = 1; }
+    if (state.u >= 1) { state.playing = false; state.t = 1; tourNote('playEnd'); }
     syncTransport();
   }
   if (state.ext) {
@@ -1171,6 +1236,7 @@ function frame() {
   drawPanel(ctxR, sizeR, rightView(), state.t, 'R');
   if (state.ext && state.ext.u >= 1) {
     const then = state.ext.thenSrc;
+    if (state.ext.dir > 0) tourNote('extDone');
     finishExtension();
     if (then) { $('#fn').value = then; applyFunction(then, false, true); }
     requestDraw();
@@ -1259,6 +1325,7 @@ function undo() {
   state.curves = h.curves; state.probes = h.probes; state.grid = h.grid;
   if (!findObj(state.sel)) state.sel = null;
   syncGridUI(); recomputeAll();
+  tourNote('undo');
 }
 function objectsChanged() {
   if (!findObj(state.sel)) state.sel = null;
@@ -1269,11 +1336,13 @@ function addCurve(d) {
   pushUndo();
   state.curves.push(makeCurve(d));
   objectsChanged();
+  tourNote('curve');
 }
 function addProbe(p, a, b) {
   pushUndo();
   const pr = makeProbe(p, a, b);
   state.probes.push(pr);
+  tourNote('probe');
   if (state.probes.length > 10) state.probes.shift();
   state.selected = pr.id; objectsChanged();
   return pr;
@@ -1308,6 +1377,7 @@ function applyFunction(src, quiet, keepT) {
   markChips();
   if (!keepT) { pause(); setT(0); }
   recomputeAll(); syncExtUI();
+  tourNote('fn');
   return true;
 }
 
@@ -1402,6 +1472,7 @@ const EXTENSIONS = [
 function loadExtension(i) {
   const ex = EXTENSIONS[i];
   loadScene({ f: ex.f, grid: { ...state.grid, ...ex.region }, curves: ex.curves, probes: [], extIdx: i });
+  tourNote('extSel');
 }
 function syncExtUI() {
   let ex = EXTENSIONS[state.extIdx];
@@ -1421,36 +1492,181 @@ function finishExtension() {
 }
 
 // Jak daleko je bod od oblasti, kde je funkce dom definovaná: 0 uvnitř, 1 nejdál v gridu.
-// Rastr přes oblast gridu a vzdálenostní transformace ve dvou průchodech (vodorovně, svisle, šikmo).
+// Rastr přes oblast gridu a přesná euklidovská vzdálenost (Felzenszwalb: dolní obálka parabol po řádcích, pak po sloupcích),
+// takže kruh konvergence dorůstá jako kruh.
+function edt1d(f, n, h) {
+  const d = new Float64Array(n), v = new Int32Array(n), zz = new Float64Array(n + 1);
+  let k = 0; v[0] = 0; zz[0] = -Infinity; zz[1] = Infinity;
+  const cut = (q, p) => ((f[q] + (q * h) ** 2) - (f[p] + (p * h) ** 2)) / (2 * h * (q - p));
+  for (let q = 1; q < n; q++) {
+    let s = cut(q, v[k]);
+    while (s <= zz[k]) { k--; s = cut(q, v[k]); }
+    k++; v[k] = q; zz[k] = s; zz[k + 1] = Infinity;
+  }
+  k = 0;
+  for (let q = 0; q < n; q++) { while (zz[k + 1] < q * h) k++; d[q] = (q * h - v[k] * h) ** 2 + f[v[k]]; }
+  return d;
+}
 function growthField(dom) {
   const g = state.grid, RW = 240, RH = Math.max(40, Math.min(480, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
-  const cw = (g.x1 - g.x0) / RW, ch = (g.y1 - g.y0) / RH, cd = Math.hypot(cw, ch), INF = 1e30, D = new Float64Array(RW * RH);
+  const cw = (g.x1 - g.x0) / RW, ch = (g.y1 - g.y0) / RH, BIG = 1e20, INF = 1e9, D = new Float64Array(RW * RH);
+  let any = false;
   for (let j = 0; j < RH; j++) for (let i = 0; i < RW; i++) {
-    const w = dom([g.x0 + (i + 0.5) * cw, g.y0 + (j + 0.5) * ch]);
-    D[j * RW + i] = isFinite(w[0]) && isFinite(w[1]) ? 0 : INF;
+    const w = dom([g.x0 + (i + 0.5) * cw, g.y0 + (j + 0.5) * ch]), ok = isFinite(w[0]) && isFinite(w[1]);
+    D[j * RW + i] = ok ? 0 : BIG; any = any || ok;
   }
-  const relax = (k, j2, i2, add) => { if (i2 >= 0 && i2 < RW && j2 >= 0 && j2 < RH) { const v = D[j2 * RW + i2] + add; if (v < D[k]) D[k] = v; } };
-  for (let j = 0; j < RH; j++) for (let i = 0; i < RW; i++) {
-    const k = j * RW + i;
-    relax(k, j, i - 1, cw); relax(k, j - 1, i, ch); relax(k, j - 1, i - 1, cd); relax(k, j - 1, i + 1, cd);
-  }
-  for (let j = RH - 1; j >= 0; j--) for (let i = RW - 1; i >= 0; i--) {
-    const k = j * RW + i;
-    relax(k, j, i + 1, cw); relax(k, j + 1, i, ch); relax(k, j + 1, i + 1, cd); relax(k, j + 1, i - 1, cd);
-  }
+  if (any) {
+    const row = new Float64Array(RW), col = new Float64Array(RH);
+    for (let j = 0; j < RH; j++) { for (let i = 0; i < RW; i++) row[i] = D[j * RW + i]; const r = edt1d(row, RW, cw); for (let i = 0; i < RW; i++) D[j * RW + i] = r[i]; }
+    for (let i = 0; i < RW; i++) { for (let j = 0; j < RH; j++) col[j] = D[j * RW + i]; const c = edt1d(col, RH, ch); for (let j = 0; j < RH; j++) D[j * RW + i] = Math.sqrt(c[j]); }
+  } else D.fill(INF);
   let max = 0;
   for (let k = 0; k < D.length; k++) if (D[k] < INF / 2 && D[k] > max) max = D[k];
-  return (x, y) => {
+  const at = (x, y) => {
     const i = Math.min(RW - 1, Math.max(0, Math.floor((x - g.x0) / cw))), j = Math.min(RH - 1, Math.max(0, Math.floor((y - g.y0) / ch)));
     const v = D[j * RW + i];
     return v >= INF / 2 || !(max > 0) ? 1 : v / max;
   };
+  return { at, D, RW, RH, cw, ch, x0: g.x0, y0: g.y0, max };
+}
+
+// ---------- přerušovaná hranice oblasti, kde funkce konverguje ----------
+// Pochodující čtverce přes uzly rastru (středy buněk). Hrany: 0 dole, 1 vpravo, 2 nahoře, 3 vlevo.
+const MS_CASES = [[], [[3, 0]], [[0, 1]], [[3, 1]], [[1, 2]], [[3, 0], [1, 2]], [[0, 2]], [[3, 2]],
+  [[2, 3]], [[0, 2]], [[0, 1], [2, 3]], [[1, 2]], [[3, 1]], [[0, 1]], [[3, 0]], []];
+// inside[k] říká, jestli je uzel uvnitř; point(a, b) dá bod hranice mezi uzly a, b. Vrací lomené čáry [[x, y], ...].
+function contourLines(RW, RH, inside, point) {
+  const segs = [], adj = new Map();
+  const add = (e, s) => { const l = adj.get(e); if (l) l.push(s); else adj.set(e, [s]); };
+  for (let j = 0; j < RH - 1; j++) for (let i = 0; i < RW - 1; i++) {
+    const k = j * RW + i;
+    const c = inside[k] | inside[k + 1] << 1 | inside[k + RW + 1] << 2 | inside[k + RW] << 3;
+    if (c === 0 || c === 15) continue;
+    const eid = [2 * k, 2 * (k + 1) + 1, 2 * (k + RW), 2 * k + 1];
+    for (const [a, b] of MS_CASES[c]) { const s = segs.length; segs.push([eid[a], eid[b]]); add(eid[a], s); add(eid[b], s); }
+  }
+  const used = new Uint8Array(segs.length), cache = new Map(), lines = [];
+  const pt = e => {
+    let p = cache.get(e);
+    if (!p) { const k = e >> 1, k2 = e & 1 ? k + RW : k + 1; p = point(k, k2); cache.set(e, p); }
+    return p;
+  };
+  const walk = (s, from) => {   // od úseku s pokračuje přes hranu, která není from
+    const out = [];
+    for (;;) {
+      used[s] = 1;
+      const [a, b] = segs[s], next = a === from ? b : a;
+      out.push(next);
+      const nb = (adj.get(next) || []).find(x => !used[x]);
+      if (nb === undefined) return out;
+      from = next; s = nb;
+    }
+  };
+  for (let s = 0; s < segs.length; s++) {
+    if (used[s]) continue;
+    const [a] = segs[s];
+    const fwd = walk(s, a), back = [];
+    const nb = (adj.get(a) || []).find(x => !used[x]);
+    if (nb !== undefined) back.push(...walk(nb, a).reverse());
+    lines.push([...back, a, ...fwd].map(pt));
+  }
+  return lines;
+}
+// bod uzlu rastru přes oblast gridu
+const nodeXY = (g, RW, RH, k) => {
+  const cw = (g.x1 - g.x0) / RW, ch = (g.y1 - g.y0) / RH;
+  return [g.x0 + (k % RW + 0.5) * cw, g.y0 + (Math.floor(k / RW) + 0.5) * ch];
+};
+// leží bod v oblasti gridu? (u polárního mezikruží)
+function inGridShape(x, y) {
+  const g = state.grid;
+  if (g.type !== 'polar') return x >= g.x0 && x <= g.x1 && y >= g.y0 && y <= g.y1;
+  const { cx, cy, R, r0 } = polarParams(g), r = Math.hypot(x - cx, y - cy);
+  return r <= R && r >= r0;
+}
+// lomené čáry v rovině z → úseky {z, f} s obrazem funkcí mapFn, mimo oblast gridu přerušené
+function edgePieces(lines, mapFn) {
+  const out = [];
+  for (const line of lines) {
+    let run = [];
+    const flush = () => {
+      if (run.length > 1) out.push(samplePath(s => {
+        const x = s * (run.length - 1), k = Math.min(run.length - 2, Math.floor(x)), a = x - k;
+        return [run[k][0] + a * (run[k + 1][0] - run[k][0]), run[k][1] + a * (run[k + 1][1] - run[k][1])];
+      }, run.length - 1, mapFn));
+      run = [];
+    };
+    for (const p of line) { if (inGridShape(p[0], p[1])) run.push(p); else flush(); }
+    flush();
+  }
+  return out;
+}
+// přesná hranice oblasti, kde je dom definovaná: rastr 240 uzlů napříč a bisekce na každé hraně
+function domainEdge(dom, mapFn) {
+  const g = state.grid, RW = 240, RH = Math.max(40, Math.min(480, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
+  const ok = z => { const w = dom(z); return isFinite(w[0]) && isFinite(w[1]); };
+  const inside = new Uint8Array(RW * RH);
+  for (let k = 0; k < inside.length; k++) inside[k] = ok(nodeXY(g, RW, RH, k)) ? 1 : 0;
+  const lines = contourLines(RW, RH, inside, (a, b) => {
+    let p = nodeXY(g, RW, RH, a), q = nodeXY(g, RW, RH, b);
+    if (!inside[a]) [p, q] = [q, p];   // p uvnitř, q venku
+    for (let it = 0; it < 24; it++) {
+      const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+      if (ok(m)) p = m; else q = m;
+    }
+    return p;
+  });
+  return edgePieces(lines, mapFn);
+}
+// hranice dorostlého gridu během rozšíření: vrstevnice vzdálenosti od oblasti konvergence
+function growthEdge(field, level, mapFn) {
+  const { D, RW, RH } = field, g = state.grid, inside = new Uint8Array(RW * RH);
+  for (let k = 0; k < inside.length; k++) inside[k] = D[k] <= level ? 1 : 0;
+  const lines = contourLines(RW, RH, inside, (a, b) => {
+    const p = nodeXY(g, RW, RH, a), q = nodeXY(g, RW, RH, b), da = D[a], db = D[b];
+    const u = Math.min(1, Math.max(0, (level - da) / (db - da || 1)));
+    return [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u];
+  });
+  return edgePieces(lines, mapFn);
+}
+// obraz hranice: u příkladu rozšířenou funkcí (na hranici samotné původní funkce definovaná není), jinak aktuální
+function edgeMapFn() {
+  const ex = EXTENSIONS[state.extIdx];
+  if (ex && norm(state.fsrc) === norm(ex.f)) { try { return compile(ex.ext); } catch (e) { /* zůstane aktuální */ } }
+  return FN;
+}
+// hranice závisí jen na funkci a oblasti gridu, ne na hustotě, proto se pamatuje
+let edgeKey = '';
+function computeEdge() {
+  const g = state.grid, key = [state.fsrc, state.extIdx, g.type, g.x0, g.x1, g.y0, g.y1, g.r0, state.tolFactor].join('|');
+  if (!state.partial) { state.edge = null; edgeKey = ''; return; }
+  if (key === edgeKey && state.edge) return;
+  edgeKey = key;
+  state.edge = domainEdge(FN, edgeMapFn());
+}
+function currentEdge() {
+  const x = state.ext;
+  if (!x) return state.edge;
+  if (!(x.field.max > 0) || x.e <= 1e-3) return x.edge0;
+  if (x.edgeE !== x.e) { x.edgeE = x.e; x.edgeNow = x.e >= 0.999 ? [] : growthEdge(x.field, x.e * x.field.max, FN); }
+  return x.edgeNow;
+}
+function drawEdge(ctx, t, ox, oy, s, brk2) {
+  const pieces = currentEdge();
+  if (!pieces || !pieces.length) return;
+  ctx.save();
+  ctx.setLineDash([7, 6]); ctx.lineCap = 'butt'; ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = pal.ink; ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (const p of pieces) tracePath(ctx, p.z, p.f, t, ox, oy, s, brk2, false, null, 1);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // Rozšíření jako růst: v rovině w je rovnou výsledek rozšířené funkce a grid v obou rovinách roste z oblasti, kde
 // původní funkce konverguje, do celé oblasti (dir = +1); zpět se stejně stáhne a pak se vrátí původní funkce (dir = −1)
 function startGrowth(dom, dir, fromBox, toBox, thenSrc) {
-  const gf = growthField(dom);
+  const field = growthField(dom), gf = field.at;
   const val = (x, y) => { const w = dom([x, y]); return isFinite(w[0]) && isFinite(w[1]) ? 0 : Math.max(gf(x, y), 1e-4); };
   const fill = z => { const a = new Float32Array(z.length / 2); for (let k = 0; k < z.length; k += 2) a[k >> 1] = val(z[k], z[k + 1]); return a; };
   for (const L of state.lines) L.gr = fill(L.z);
@@ -1465,7 +1681,9 @@ function startGrowth(dom, dir, fromBox, toBox, thenSrc) {
     for (let a = 0; a <= K; a++) for (let b = 0; b <= K; b++) m = Math.max(m, Lt.gr[(ci * K + a) * Lt.NV + cj * K + b]);
     Lt.cellG[ci * Lt.nv + cj] = m;
   }
-  state.ext = { u: 0, p: 0, e: dir > 0 ? 0 : 1, dir, fromBox, toBox, thenSrc };
+  // hranice: na začátku přesná hranice oblasti konvergence, během růstu vrstevnice, na konci splyne s okrajem gridu
+  const edge0 = domainEdge(dom, FN);
+  state.ext = { u: 0, p: 0, e: dir > 0 ? 0 : 1, dir, fromBox, toBox, thenSrc, field, edge0, edgeE: -1, edgeNow: null };
   lastTs = performance.now(); requestDraw();
 }
 function extend() {
@@ -1526,23 +1744,25 @@ function eraseAt(X, Y) {
   if (!o) return;
   if (!drag.pushed) { pushUndo(); drag.pushed = true; }
   removeObject(o); state.hover = null; objectsChanged();
+  tourNote('erase');
 }
 // posun vybraného objektu nebo roztažení gridu, přepočet nejvýš jednou za snímek
 let movePending = false;
 function applyMove() {
   movePending = false;
   if (!drag) return;
-  if (drag.kind === 'stretch') { if (drag.target) { Object.assign(state.grid, drag.target); syncGridUI(); recomputeAll(); } return; }
+  if (drag.kind === 'stretch') { if (drag.target) { Object.assign(state.grid, drag.target); syncGridUI(); recomputeAll(); tourNote('gridChange'); } return; }
   if (drag.kind !== 'move') return;
   const o = findObj(drag.id);
   if (!o) return;
   if (o.isGrid) {
     const g = drag.orig;
     Object.assign(state.grid, { x0: g.x0 + drag.dx, x1: g.x1 + drag.dx, y0: g.y0 + drag.dy, y1: g.y1 + drag.dy });
-    syncGridUI(); recomputeAll(); return;
+    syncGridUI(); recomputeAll(); tourNote('gridChange'); return;
   }
   if (o.kind) state.curves[state.curves.indexOf(o)] = shiftedCurve(drag.orig, drag.dx, drag.dy);
   else { o.p = [drag.orig.p[0] + drag.dx, drag.orig.p[1] + drag.dy]; fillFData(o, [o.a, o.b]); }
+  tourNote('objMove');
   objectsChanged();
 }
 
@@ -1648,18 +1868,18 @@ cL.addEventListener('pointerleave', () => { if (state.hover) { state.hover = nul
 let lastProbe = null;
 cL.addEventListener('dblclick', e => {
   const [X, Y] = evPos(e, cL);
-  if (state.tool === 'erase') { if (!hitObject(X, Y)) { fitLeft(); requestDraw(); } return; }
+  if (state.tool === 'erase') { if (!hitObject(X, Y)) { fitLeft(); requestDraw(); tourNote('viewReset'); } return; }
   // první klik dvojkliku s nástrojem Vektory vložil vektory navíc, ty se vrátí
   if (state.tool === 'probe' && lastProbe && performance.now() - lastProbe.time < 700 && state.probes.at(-1)?.id === lastProbe.id) undo();
   lastProbe = null;
   const o = hitObject(X, Y) || (inGrid(X, Y) || (state.sel === 'grid' && gridHandleAt(X, Y)) ? findObj('grid') : null);
-  if (!o) { fitLeft(); requestDraw(); return; }
+  if (!o) { fitLeft(); requestDraw(); tourNote('viewReset'); return; }
   state.sel = o.id === state.sel ? null : o.id;
   if (!o.kind && !o.isGrid) state.selected = o.id;
   cL.style.cursor = state.sel ? 'move' : TOOL_CURSOR[state.tool];
   requestDraw();
 });
-cR.addEventListener('dblclick', () => { state.autoCam = true; $('#autoCam').checked = true; refineForView(); requestDraw(); });
+cR.addEventListener('dblclick', () => { state.autoCam = true; $('#autoCam').checked = true; refineForView(); requestDraw(); tourNote('viewReset'); });
 
 function resample(pts, step) {
   const out = [pts[0].slice()];
@@ -1695,6 +1915,7 @@ function wheelZoom(e, cv, sz, getView) {
   e.preventDefault();
   const v = getView(), [X, Y] = evPos(e, cv), w = toWorld(v, sz, X, Y);
   v.s *= Math.exp(-e.deltaY * 0.0015);
+  tourNote('zoom');
   v.cx = w[0] - (X - sz.w / 2) / v.s; v.cy = w[1] + (Y - sz.h / 2) / v.s;
   requestDraw();
 }
@@ -1753,7 +1974,7 @@ $('#fn').addEventListener('keydown', e => {
 
 $('#play').addEventListener('click', togglePlay);
 $('#rewind').addEventListener('click', () => { pause(); setT(0); });
-$('#tSlider').addEventListener('input', e => { const v = +e.target.value; pause(); setT(v); });
+$('#tSlider').addEventListener('input', e => { const v = +e.target.value; pause(); setT(v); tourNote('tInput'); });
 document.querySelectorAll('#speed button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', x === b));
   state.dur = +b.dataset.d;
@@ -1786,6 +2007,7 @@ document.querySelectorAll('#gridType button').forEach(b => b.addEventListener('c
 let densityPending = false;
 $('#density').addEventListener('input', e => {
   state.grid.n = +e.target.value; $('#densOut').textContent = e.target.value;
+  tourNote('gridChange');
   if (!densityPending) { densityPending = true; requestAnimationFrame(() => { densityPending = false; recomputeAll(); }); }
 });
 $('#checker').addEventListener('change', e => { state.grid.checker = e.target.checked; requestDraw(); });
@@ -1820,6 +2042,152 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft' && tag !== 'INPUT') { pause(); setT(state.t - 0.05); }
 });
 
+// ---------- návod ----------
+// Interaktivní: každý krok zvýrazní místo, vysvětlí ho a počká, až to člověk udělá. Události hlásí tourNote(),
+// krok je hotový, když jeho podmínka platí oproti stavu z jeho začátku.
+const TOUR_KEY = 'konformni-navod-v1';
+const tourStats = {};
+function tourNote(name) { tourStats[name] = (tourStats[name] || 0) + 1; tourCheck(); }
+const more = (base, name) => (tourStats[name] || 0) > (base[name] || 0);
+const toolBtn = t => $(`#tools .tool[data-tool="${t}"]`);
+const TOUR = [
+  { title: 'Dvě roviny', info: true, targets: () => [$('#cL').parentElement, $('#cR').parentElement],
+    text: 'Vlevo je rovina z, tam si všechno připravíš. Vpravo je rovina w, kam se to přenese funkcí f. Vede mezi nimi cesta w = (1 − t)·z + t·f(z): při t = 0 jsou obě roviny stejné, při t = 1 vidíš f(z).' },
+  { title: 'Zadej funkci', targets: () => [$('#fnRow'), $('#chips')],
+    text: 'Funkci napíšeš do pole, nebo vybereš čip. Pole umí i x, y, i, exp, sin, log a mocniny.',
+    task: 'Klikni na čip eᶻ, nebo napiš vlastní funkci a stiskni Enter.', done: b => more(b, 'fn') },
+  { title: 'Pusť animaci', targets: () => [$('#play')],
+    text: 'Animace přenese grid z roviny z do roviny w.',
+    task: 'Klikni na ▶ Přehrát a počkej, až grid dojede.', done: b => more(b, 'playEnd') },
+  { title: 'Posuvník t', targets: () => [$('#tSlider').parentElement],
+    text: 'Pro každé t je w = (1 − t)·z + t·f(z) holomorfní, takže úhly drží v každém mezikroku.',
+    task: 'Potáhni posuvník a zastav se někde mezi 0 a 1.', done: b => more(b, 'tInput') },
+  { title: 'Nakresli křivku', targets: () => [$('#cL').parentElement], setup: () => setTool('free'),
+    text: 'Nástroj křivka je vybraný. Vpravo se hned ukáže obraz toho, co nakreslíš.',
+    task: 'Táhni myší v rovině z a nakresli křivku.', done: b => more(b, 'curve') },
+  { title: 'Úhel v průsečíku', targets: () => [$('#cL').parentElement, $('#cR').parentElement],
+    text: 'V průsečíku dvou křivek se ukáže úhel mezi jejich tečnami. Vlevo i vpravo vyjde stejně, holomorfní funkce úhly zachovává.',
+    task: 'Nakresli druhou křivku tak, aby tu první protnula.', done: () => state.inters.length > 0 },
+  { title: 'Vektory', targets: () => [toolBtn('probe'), $('#cL').parentElement],
+    text: 'Dvojice vektorů v bodě ukáže, co s okolím udělá derivace: otočí ho a natáhne, úhel mezi vektory zůstane.',
+    task: 'Vyber nástroj vektory, klikni do roviny z a pak táhni bodem nebo hroty.', done: b => more(b, 'probe') },
+  { title: 'Výběr dvojklikem', targets: () => [$('#cL').parentElement], setup: () => setTool('free'),
+    text: 'Dvojklik na křivku nebo vektory je vybere. Pak s nimi jde táhnout a dalším dvojklikem je pustíš. Delete vybraný objekt smaže.',
+    task: 'Dvojklikni na křivku a přetáhni ji jinam.', done: b => more(b, 'objMove') },
+  { title: 'Guma a Zpět', targets: () => [toolBtn('erase'), $('#undo')],
+    text: 'Guma smaže, na co klikneš. Tlačítko Zpět nebo Ctrl+Z vrátí každou změnu.',
+    task: 'Vyber gumu, smaž jednu křivku a pak ji vrať tlačítkem Zpět.', done: b => more(b, 'erase') && more(b, 'undo') },
+  { title: 'Grid', targets: () => [$('#cL').parentElement, $('#density').parentElement], setup: () => setTool('free'),
+    text: 'Dvojklik do gridu mimo křivky ho vybere: za úchyty ho roztáhneš, tažením uvnitř posuneš. Hustotu měníš posuvníkem nahoře.',
+    task: 'Roztáhni grid za úchyt, nebo změň jeho hustotu.', done: b => more(b, 'gridChange') },
+  { title: 'Pohled', targets: () => [$('#cL').parentElement, $('#cR').parentElement],
+    text: 'Kolečkem přibližuješ, pravým tlačítkem posouváš. Dvojklik mimo všechny objekty vrátí pohled roviny: v rovině w kamkoli, v rovině z mimo grid.',
+    task: 'Přibliž kolečkem rovinu w a pak do ní dvojklikni.', done: b => more(b, 'zoom') && more(b, 'viewReset') },
+  { title: 'Analytické rozšíření', targets: () => [$('#extList')],
+    text: 'Některé funkce jsou zadané jen na části roviny, třeba řada, která konverguje jen v kruhu. Grid je pak jen tam, kde funkce konverguje, a přerušovaná čára ukazuje hranici.',
+    task: 'Vyber příklad Σ zⁿ.', done: b => more(b, 'extSel') },
+  { title: 'Rozšířit', targets: () => [$('#extBtn')], setup: () => { pause(); if (state.t < 1) setT(1); },
+    text: 'Rozšíření je jen jedno, proto na původní obraz navazuje bez švu. Grid doroste přes hranici do celé oblasti a vpravo se rovnou ukáže výsledek.',
+    task: 'Klikni na Rozšířit a sleduj obě roviny.', done: b => more(b, 'extDone') },
+  { title: 'Hotovo', info: true, last: true, targets: () => [$('#tourBtn')],
+    text: 'To je všechno. Návod si kdykoli pustíš znovu tlačítkem Návod a klávesové zkratky najdeš dole v panelu.' },
+];
+let tour = null;   // { i, base, doneAt }
+const tourSeen = () => { try { return localStorage.getItem(TOUR_KEY) === 'hotovo'; } catch (e) { return false; } };
+const tourMarkSeen = () => { try { localStorage.setItem(TOUR_KEY, 'hotovo'); } catch (e) { /* bez úložiště se okno ukáže znovu */ } };
+
+function showWelcome(first) {
+  $('#welcomeTitle').textContent = first ? 'Vítej v grafu konformních zobrazení' : 'Návod';
+  $('#welcomeText').textContent = first
+    ? 'Za pár minut tě provedu základy: funkce, animace, kreslení, úhly, vektory a analytické rozšíření. Všechno si rovnou vyzkoušíš.'
+    : 'Provede tě základy krok za krokem. Začne v prázdné rovině, takže to, co máš teď nakreslené, zmizí.';
+  $('#welcomeStart').textContent = first ? 'Projít návod' : 'Začít';
+  $('#welcomeSkip').textContent = first ? 'Přeskočit a už neukazovat' : 'Zrušit';
+  $('#tourWelcome').hidden = false;
+  $('#welcomeStart').focus();
+}
+function startTour() {
+  $('#tourWelcome').hidden = true;
+  loadScene(SCENES[SCENES.length - 1]);
+  setTool('free');
+  $('.side').scrollTop = 0;
+  tour = { i: -1 };
+  $('#tourDim').removeAttribute('hidden'); $('#tourCard').hidden = false;   // SVG nemá vlastnost hidden, jen atribut
+  tourGo(0);
+  requestAnimationFrame(tourFollow);
+}
+function endTour() {
+  tour = null;
+  $('#tourDim').setAttribute('hidden', ''); $('#tourCard').hidden = true;
+  tourMarkSeen();
+}
+function tourGo(i) {
+  if (!tour) return;
+  if (i >= TOUR.length) { endTour(); return; }
+  const st = TOUR[i];
+  tour.i = i; tour.base = { ...tourStats }; tour.doneAt = 0;
+  if (st.setup) st.setup();
+  $('#tourCount').textContent = `${i + 1} / ${TOUR.length}`;
+  $('#tourTitle').textContent = st.title;
+  $('#tourText').textContent = st.text;
+  const task = $('#tourTask');
+  task.hidden = !st.task; task.textContent = st.task || ''; task.classList.remove('done');
+  $('#tourNext').hidden = !st.info; $('#tourNext').textContent = st.last ? 'Hotovo' : 'Další';
+  $('#tourSkip').hidden = !!st.info;
+  $('#tourEnd').hidden = !!st.last;
+  const first = st.targets().find(Boolean);
+  if (first && first.closest('.side')) first.scrollIntoView({ block: 'nearest' });
+  tourPlace();
+}
+// když je úkol splněný, odškrtne se a za chvíli jde další krok
+function tourCheck() {
+  if (!tour || tour.doneAt) return;
+  const st = TOUR[tour.i];
+  if (!st || !st.done || !st.done(tour.base)) return;
+  tour.doneAt = performance.now();
+  $('#tourTask').classList.add('done');
+  const i = tour.i;
+  setTimeout(() => { if (tour && tour.i === i) tourGo(i + 1); }, 1100);
+}
+function tourPlace() {
+  if (!tour) return;
+  const st = TOUR[tour.i], W = innerWidth, H = innerHeight;
+  const rects = st.targets().filter(Boolean).map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
+  const ns = 'http://www.w3.org/2000/svg', holes = $('#tourHoles'), rings = $('#tourRings');
+  holes.textContent = ''; rings.textContent = '';
+  for (const r of rects) {
+    for (const [parent, cls] of [[holes, ''], [rings, 'tour-ring']]) {
+      const el = document.createElementNS(ns, 'rect');
+      el.setAttribute('x', r.left - 6); el.setAttribute('y', r.top - 6); el.setAttribute('width', r.width + 12); el.setAttribute('height', r.height + 12);
+      el.setAttribute('rx', 8); el.setAttribute('fill', 'black');
+      if (cls) el.setAttribute('class', cls);
+      parent.appendChild(el);
+    }
+  }
+  const card = $('#tourCard');
+  if (W <= 700) return;   // na telefonu je karta dole přes celou šířku
+  const cw = card.offsetWidth, ch = card.offsetHeight, r = rects[0];
+  let x = W / 2 - cw / 2, y = H / 2 - ch / 2;
+  if (r) {
+    if (r.left > cw + 20) { x = r.left - cw - 12; y = r.top; }           // vlevo od místa (u rovin přes panel s ovládáním)
+    else if (W - r.right > cw + 28) { x = r.right + 18; y = r.top; }    // vpravo (u ovládání přes rovinu z)
+    else if (H - r.bottom > ch + 28) { x = r.left; y = r.bottom + 18; }
+    else if (r.top > ch + 28) { x = r.left; y = r.top - ch - 18; }
+    else { x = r.left + 24; y = r.bottom - ch - 24; }
+  }
+  card.style.left = Math.min(W - cw - 12, Math.max(12, x)) + 'px';
+  card.style.top = Math.min(H - ch - 12, Math.max(12, y)) + 'px';
+}
+// karta a okna jdou za místem i při posouvání panelu nebo změně velikosti okna
+function tourFollow() { if (!tour) return; tourPlace(); requestAnimationFrame(tourFollow); }
+
+$('#tourBtn').addEventListener('click', () => showWelcome(false));
+$('#welcomeStart').addEventListener('click', startTour);
+$('#welcomeSkip').addEventListener('click', () => { $('#tourWelcome').hidden = true; if ($('#welcomeTitle').textContent !== 'Návod') tourMarkSeen(); });
+$('#tourNext').addEventListener('click', () => { if (tour) tourGo(tour.i + 1); });
+$('#tourSkip').addEventListener('click', () => { if (tour) tourGo(tour.i + 1); });
+$('#tourEnd').addEventListener('click', endTour);
+
 // ---------- start ----------
 function resizeAll() {
   dpr = window.devicePixelRatio || 1;
@@ -1838,6 +2206,7 @@ resizeAll();
 loadScene(SCENES[SCENES.length - 1]);   // výchozí stav: prázdný grid
 syncTransport();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(requestDraw);
+if (!tourSeen()) showWelcome(true);   // při první návštěvě nabídne návod
 })();
 </script>
 </html>
