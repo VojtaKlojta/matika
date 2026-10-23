@@ -690,13 +690,15 @@ function computeTol() {
 
 // vzorkuje cestu P(s), s ∈ [0, 1] (funkcí G, jinak aktuální f) a zjemňuje tam, kde se obraz rychle mění nebo zatáčí;
 // obraz leží na lomené čáře s odchylkou pod čtvrt pixelu, takže se obrazy, které se mají krýt, opravdu kryjí
-function samplePath(P, N0, G) {
+// scale(fa, fb) volitelně zvětší toleranci úseku (u hranice daleko za obrazem gridu stačí hrubě)
+function samplePath(P, N0, G, scale) {
   const ev = G ? (x, y) => G([x, y]) : F;
-  const zs = [], fs = [], tol2 = state.tol * state.tol, dev2 = (state.tol / 12) ** 2;
+  const zs = [], fs = [], tol2B = state.tol * state.tol, dev2B = (state.tol / 12) ** 2;
   const p0 = P(0); let f0 = ev(p0[0], p0[1]);
   zs.push(p0[0], p0[1]); fs.push(f0[0], f0[1]);
   function rec(sa, fa, sb, fb, d) {
     const fin = isFinite(fa[0]) && isFinite(fa[1]) && isFinite(fb[0]) && isFinite(fb[1]);
+    const m2 = scale && fin ? scale(fa, fb) ** 2 : 1, tol2 = tol2B * m2, dev2 = dev2B * m2;
     let jump = false;
     if (fin) {
       const dx = fb[0] - fa[0], dy = fb[1] - fa[1], d2 = dx * dx + dy * dy;
@@ -883,7 +885,7 @@ function recomputeAll() {
   for (const c of state.curves) computeCurve(c);
   computeIntersections();
   for (const pr of state.probes) fillFData(pr, [pr.a, pr.b]);
-  checkHolo(); computeEdge(); computeImgBox(); requestDraw();
+  checkHolo(); computeImgBox(); computeEdge(); requestDraw();
 }
 
 // ---------- pohledy ----------
@@ -1473,7 +1475,7 @@ const EXTENSIONS = [
     region: { x0: -3.5, x1: 3.5, y0: -1.5, y1: 1.5 }, curves: [{ kind: 'line', a: [-3.2, 0.6], b: [3.2, 0.9] }] },
   { label: 'z<sup>2</sup> v kruhu, (z/|z|)<sup>2</sup> venku', dom: '|z| < 1', extLabel: 'z²',
     note: 'Venku funkce není holomorfní, kruh z |z| > 1 slisuje na jednotkovou kružnici. V kruhu se shoduje se z², takže jediné holomorfní rozšíření je z².',
-    f: 'if(abs(z) < 1; z^2; (z/abs(z))^2)', ext: 'z^2',
+    f: 'if(abs(z) < 1; z^2; (z/abs(z))^2)', ext: 'z^2', holo: 'abs(z) < 1',
     region: { x0: -2, x1: 2, y0: -2, y1: 2 }, curves: [{ kind: 'circle', c: [0.5, 0.3], r: 0.9 }] },
 ];
 // příklad mění jen oblast gridu; typ, hustotu a šachovnici nechá, jak je nastavené
@@ -1491,6 +1493,8 @@ function syncExtUI() {
   btn.textContent = !ex ? 'Rozšířit' : norm(state.fsrc) === norm(ex.ext) ? 'Vrátit původní' : `Rozšířit na ${ex.extLabel}`;
   $('#extNote').textContent = ex ? ex.note : 'Vyber příklad. Funkce je zadaná jen na části roviny nebo tam není holomorfní.';
 }
+// oblast, kterou obtáhne přerušovaná hranice: kde je původní funkce definovaná, u příkladu s holo kde je holomorfní
+const extDomain = ex => compile(ex.holo ? `if(${ex.holo}; z)` : ex.f);
 function finishExtension() {
   if (!state.ext) return;
   state.ext = null;
@@ -1592,20 +1596,41 @@ function inGridShape(x, y) {
   const { cx, cy, R, r0 } = polarParams(g), r = Math.hypot(x - cx, y - cy);
   return r <= R && r >= r0;
 }
-// lomené čáry v rovině z → úseky {z, f} s obrazem funkcí mapFn, mimo oblast gridu přerušené
-function edgePieces(lines, mapFn) {
-  const out = [];
+// lomené čáry v rovině z → úseky {z, f} s obrazem funkcí mapFn. Přeruší se mimo oblast gridu a tam, kde obraz uteče
+// daleko za obraz gridu (u pólu na hranici); jinak by zjemňování u pólu spotřebovalo body pro zbytek hranice.
+// Vzorkuje se po kusech o nejvýš EDGE_CHUNK uzlech, každý kus má vlastní rozpočet bodů. coarse > 1 = hrubší tolerance.
+const EDGE_CHUNK = 160;
+function edgePieces(lines, mapFn, coarse = 1) {
+  const out = [], b = state.imgBox;
+  const cx = b ? (b.x0 + b.x1) / 2 : 0, cy = b ? (b.y0 + b.y1) / 2 : 0;
+  const R = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0, 1e-3) : Infinity, far = 40 * R;
+  const scale = (fa, fb) => coarse * Math.max(1, Math.hypot(fa[0] - cx, fa[1] - cy) / R, Math.hypot(fb[0] - cx, fb[1] - cy) / R);
+  const near = p => { const w = mapFn(p); return isFinite(w[0]) && isFinite(w[1]) && Math.hypot(w[0] - cx, w[1] - cy) < far; };
+  // pól mezi dvěma uzly: oba konce mají obraz blízko, ale někde mezi nimi obraz uteče
+  const chordNear = (a, b) => {
+    for (let k = 1; k < 8; k++) if (!near([a[0] + (b[0] - a[0]) * k / 8, a[1] + (b[1] - a[1]) * k / 8])) return false;
+    return true;
+  };
   for (const line of lines) {
-    let run = [];
-    const flush = () => {
-      if (run.length > 1) out.push(samplePath(s => {
-        const x = s * (run.length - 1), k = Math.min(run.length - 2, Math.floor(x)), a = x - k;
-        return [run[k][0] + a * (run[k + 1][0] - run[k][0]), run[k][1] + a * (run[k + 1][1] - run[k][1])];
-      }, run.length - 1, mapFn));
-      run = [];
+    let run = [], prev = null;
+    const flush = keepLast => {
+      if (run.length > 1) {
+        const r = run;
+        out.push(samplePath(s => {
+          const x = s * (r.length - 1), k = Math.min(r.length - 2, Math.floor(x)), a = x - k;
+          return [r[k][0] + a * (r[k + 1][0] - r[k][0]), r[k][1] + a * (r[k + 1][1] - r[k][1])];
+        }, r.length - 1, mapFn, scale));
+      }
+      run = keepLast && run.length ? [run[run.length - 1]] : [];
     };
-    for (const p of line) { if (inGridShape(p[0], p[1])) run.push(p); else flush(); }
-    flush();
+    for (const p of line) {
+      const ok = inGridShape(p[0], p[1]) && near(p);
+      if (ok && prev && !chordNear(prev, p)) flush(false);
+      if (ok) { run.push(p); if (run.length > EDGE_CHUNK) flush(true); }
+      else flush(false);
+      prev = ok ? p : null;
+    }
+    flush(false);
   }
   return out;
 }
@@ -1626,7 +1651,8 @@ function domainEdge(dom, mapFn) {
   });
   return edgePieces(lines, mapFn);
 }
-// hranice dorostlého gridu během rozšíření: vrstevnice vzdálenosti od oblasti konvergence
+// hranice dorostlého gridu během rozšíření: vrstevnice vzdálenosti od oblasti konvergence. Počítá se v každém snímku
+// a hýbe se, proto s tolerancí jako bez přiblížení (zjemnění po zoomu roviny w by animaci zpomalilo)
 function growthEdge(field, level, mapFn) {
   const { D, RW, RH } = field, g = state.grid, inside = new Uint8Array(RW * RH);
   for (let k = 0; k < inside.length; k++) inside[k] = D[k] <= level ? 1 : 0;
@@ -1635,7 +1661,7 @@ function growthEdge(field, level, mapFn) {
     const u = Math.min(1, Math.max(0, (level - da) / (db - da || 1)));
     return [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u];
   });
-  return edgePieces(lines, mapFn);
+  return edgePieces(lines, mapFn, 1 / Math.min(1, state.tolFactor));
 }
 // obraz hranice: u příkladu rozšířenou funkcí (na hranici samotné původní funkce definovaná není), jinak aktuální
 function edgeMapFn() {
@@ -1647,10 +1673,11 @@ function edgeMapFn() {
 let edgeKey = '';
 function computeEdge() {
   const g = state.grid, key = [state.fsrc, state.extIdx, g.type, g.x0, g.x1, g.y0, g.y1, g.r0, state.tolFactor].join('|');
-  if (!state.partial) { state.edge = null; edgeKey = ''; return; }
+  const ex = EXTENSIONS[state.extIdx], onEx = !!ex && norm(state.fsrc) === norm(ex.f);
+  if (!state.partial && !onEx) { state.edge = null; edgeKey = ''; return; }
   if (key === edgeKey && state.edge) return;
   edgeKey = key;
-  state.edge = domainEdge(FN, edgeMapFn());
+  state.edge = domainEdge(onEx ? extDomain(ex) : FN, edgeMapFn());
 }
 function currentEdge() {
   const x = state.ext;
@@ -1673,8 +1700,8 @@ function drawEdge(ctx, t, ox, oy, s, brk2) {
 
 // Rozšíření jako růst: v rovině w je rovnou výsledek rozšířené funkce a grid v obou rovinách roste z oblasti, kde
 // původní funkce konverguje, do celé oblasti (dir = +1); zpět se stejně stáhne a pak se vrátí původní funkce (dir = −1)
-function startGrowth(dom, dir, fromBox, toBox, thenSrc) {
-  const field = growthField(dom), gf = field.at;
+function startGrowth(dom, dir, fromBox, toBox, thenSrc, edgeDom = dom) {
+  const field = growthField(edgeDom), gf = field.at;
   const val = (x, y) => { const w = dom([x, y]); return isFinite(w[0]) && isFinite(w[1]) ? 0 : Math.max(gf(x, y), 1e-4); };
   const fill = z => { const a = new Float32Array(z.length / 2); for (let k = 0; k < z.length; k += 2) a[k >> 1] = val(z[k], z[k + 1]); return a; };
   for (const L of state.lines) L.gr = fill(L.z);
@@ -1690,7 +1717,7 @@ function startGrowth(dom, dir, fromBox, toBox, thenSrc) {
     Lt.cellG[ci * Lt.nv + cj] = m;
   }
   // hranice: na začátku přesná hranice oblasti konvergence, během růstu vrstevnice, na konci splyne s okrajem gridu
-  const edge0 = domainEdge(dom, FN);
+  const edge0 = domainEdge(edgeDom, FN);
   state.ext = { u: 0, p: 0, e: dir > 0 ? 0 : 1, dir, fromBox, toBox, thenSrc, field, edge0, edgeE: -1, edgeNow: null };
   lastTs = performance.now(); requestDraw();
 }
@@ -1698,13 +1725,13 @@ function extend() {
   const ex = EXTENSIONS[state.extIdx];
   if (!ex) return;
   pause(); finishExtension();
-  const dom = compile(ex.f), fromBox = state.imgBox && { ...state.imgBox };
+  const dom = compile(ex.f), edgeDom = extDomain(ex), fromBox = state.imgBox && { ...state.imgBox };
   if (norm(state.fsrc) !== norm(ex.ext)) {
     $('#fn').value = ex.ext;
     applyFunction(ex.ext, false, true);
-    startGrowth(dom, +1, fromBox, state.imgBox && { ...state.imgBox }, null);
+    startGrowth(dom, +1, fromBox, state.imgBox && { ...state.imgBox }, null, edgeDom);
   } else {
-    startGrowth(dom, -1, fromBox, imageBox(dom), ex.f);
+    startGrowth(dom, -1, fromBox, imageBox(dom), ex.f, edgeDom);
   }
 }
 
