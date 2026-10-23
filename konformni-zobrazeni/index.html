@@ -1,0 +1,1773 @@
+<!doctype html>
+<html lang="cs">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Nakresli do roviny křivky a vektory, zadej komplexní funkci a sleduj, jak se grid přenese. Holomorfní funkce drží úhly, protipříklady ne.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Konformní zobrazení">
+<meta property="og:description" content="Nakresli do roviny křivky a vektory, zadej komplexní funkci a sleduj, jak se grid přenese. Holomorfní funkce drží úhly, protipříklady ne.">
+<meta property="og:url" content="https://matika.vojtakloud.com/konformni-zobrazeni/">
+<meta property="og:image" content="https://matika.vojtakloud.com/media/nahled-konformni-zobrazeni.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="icon" href="../media/favicon-32.png" type="image/png">
+<link rel="apple-touch-icon" href="../media/apple-touch-icon.png">
+<title>Konformní zobrazení</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../fonts/fonts.css">
+<style>
+/* Rozvržení: úzký panel s ovládáním vlevo, vedle dvě stejně velké roviny (z = příprava, w = obraz).
+   Ovládání je jednobarevné, barvu nese jen matematika (grid, křivky, vektory). */
+:root {
+  --bg: #0b0c10; --surface: #12141b; --panel: #0e1016; --ink: #e8eaf0; --muted: #8b91a3; --hair: #262a37;
+  --u-line: #5aaee8; --v-line: #f2a65a; --axis: #343a4a; --tick: #6c7387;
+  --vec-a: #ff5c7a; --vec-b: #3fdc9a;
+  --c1: #ffd75e; --c2: #f472b6; --c3: #b794f6; --c4: #2dd4bf; --c5: #e5e7eb;
+  --good: #4ade80; --bad: #f87171; --warn: #fbbf24;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-math: "STIX Two Text", "Cambria Math", Cambria, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f5f8; --surface: #eceef3; --panel: #ffffff; --ink: #14161c; --muted: #5d6476; --hair: #d6d9e2;
+    --u-line: #1f77b4; --v-line: #d9711c; --axis: #c3c8d4; --tick: #8a91a3;
+    --vec-a: #e11d48; --vec-b: #059669;
+    --c1: #b7791f; --c2: #db2777; --c3: #7c3aed; --c4: #0d9488; --c5: #374151;
+    --good: #15803d; --bad: #b91c1c; --warn: #b45309;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f4f5f8; --surface: #eceef3; --panel: #ffffff; --ink: #14161c; --muted: #5d6476; --hair: #d6d9e2;
+  --u-line: #1f77b4; --v-line: #d9711c; --axis: #c3c8d4; --tick: #8a91a3;
+  --vec-a: #e11d48; --vec-b: #059669;
+  --c1: #b7791f; --c2: #db2777; --c3: #7c3aed; --c4: #0d9488; --c5: #374151;
+  --good: #15803d; --bad: #b91c1c; --warn: #b45309;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { height: 100%; }
+body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased; }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+input[type="range"], input[type="checkbox"] { accent-color: var(--ink); }
+
+.app { height: 100%; display: grid; grid-template-columns: 308px minmax(0, 1fr); }
+
+/* ---------- panel s ovládáním ---------- */
+.side {
+  min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 20px;
+  padding-block: 18px 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px;
+  background: var(--surface); border-right: 1px solid var(--hair);
+}
+.brand { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.back { display: inline-block; margin-bottom: 8px; font-size: 12.5px; color: var(--muted); text-decoration: none; }
+.back:hover { color: var(--ink); }
+.brand h1 { margin: 0; font: 500 23px/1.15 var(--font-math); letter-spacing: 0.005em; text-wrap: balance; }
+.thm { margin: 6px 0 0; font: italic 14px/1.4 var(--font-math); color: var(--muted); }
+.thm b { font-style: normal; font-weight: 500; color: var(--ink); }
+section { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.hint { margin: 0; font-size: 12.5px; color: var(--muted); }
+.icon-btn {
+  flex: none; width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--hair); border-radius: 6px; background: var(--panel); font-size: 16px;
+}
+.icon-btn:hover, .btn:hover, .tool:hover, .chip:hover { border-color: var(--muted); }
+.btn { border: 1px solid var(--hair); background: var(--panel); border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+select {
+  width: 100%; padding: 7px 8px; border-radius: 6px; border: 1px solid var(--hair);
+  background: var(--panel); cursor: pointer;
+}
+
+.fn-row {
+  display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  background: var(--panel); border: 1px solid var(--hair); border-radius: 6px;
+}
+.fn-row:focus-within { border-color: var(--ink); }
+.fn-row.bad { border-color: var(--bad); }
+.fn-pre { font: italic 18px/1 var(--font-math); color: var(--muted); white-space: nowrap; }
+#fn { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; padding: 10px 0; font: 500 16px/1.2 var(--font-mono); }
+.err { margin: 0; font-size: 12.5px; color: var(--bad); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 2px 10px 3px; border-radius: 999px; border: 1px solid var(--hair); background: transparent;
+  font: 16px/1.3 var(--font-math); cursor: pointer;
+}
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.sublabel { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.badge { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+.badge::before { content: ""; flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--dot, var(--muted)); }
+.badge.good { --dot: var(--good); } .badge.bad { --dot: var(--bad); } .badge.warn { --dot: var(--warn); }
+
+.transport { display: flex; gap: 8px; }
+.play {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+  padding: 10px 14px; border: 0; border-radius: 6px; background: var(--ink); color: var(--bg); font-weight: 600; font-size: 15px;
+}
+.trow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 13px; }
+.trow.lab { grid-template-columns: auto minmax(0, 1fr) auto; }
+.trow output { font: 13px var(--font-mono); font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
+.trow input { width: 100%; min-width: 0; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--hair); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 6px 4px; cursor: pointer; color: var(--muted); font-size: 13px; }
+.seg button + button { border-left: 1px solid var(--hair); }
+.seg button.on { background: var(--ink); color: var(--bg); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+
+.tools { display: flex; flex-direction: column; gap: 6px; }
+.tool-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tool-group.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tool {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 6px; cursor: pointer;
+  border: 1px solid var(--hair); border-radius: 6px; background: var(--panel); color: var(--muted); font-size: 12px;
+}
+.tool svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tool.on { color: var(--ink); border-color: var(--ink); }
+
+.ext-list { display: flex; flex-direction: column; gap: 6px; }
+.ext-item {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 10px; padding: 6px 10px; cursor: pointer; text-align: left;
+  border: 1px solid var(--hair); border-radius: 6px; background: var(--panel);
+}
+.ext-item:hover { border-color: var(--muted); }
+.ext-item.on { border-color: var(--ink); }
+.ext-item .m { font: 16px/1.35 var(--font-math); }
+.ext-item .d { font-size: 12px; color: var(--muted); }
+.ext-btn { padding: 9px 12px; font-size: 14px; font-weight: 600; border-color: var(--ink); }
+.ext-btn:disabled { opacity: 0.45; cursor: default; border-color: var(--hair); }
+.info { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; font-size: 13px; }
+.info dt { color: var(--muted); font: italic 15px/1.35 var(--font-math); }
+.info dd { margin: 0; text-align: right; font: 13px/1.6 var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.info dd.note { grid-column: 1 / -1; text-align: left; font: 12.5px/1.45 var(--font-ui); color: var(--warn); }
+
+.ranges { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.ranges input {
+  width: 100%; min-width: 0; padding: 4px 6px; border-radius: 5px; border: 1px solid var(--hair);
+  background: var(--panel); color: var(--ink); font: 13px var(--font-mono);
+}
+.keys { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.keys kbd { font: 11px var(--font-mono); padding: 0 4px; border: 1px solid var(--hair); border-radius: 3px; color: var(--ink); }
+
+/* ---------- roviny ---------- */
+.stage {
+  min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 10px 14px;
+  padding-block: 12px 14px; padding-left: 14px; padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.stagebar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 24px; }
+.density { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.density input { width: min(300px, 46vw); }
+.density output { min-width: 2ch; text-align: right; font: 500 15px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.btn.danger:hover { border-color: var(--bad); color: var(--bad); }
+.panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-inline: 2px; }
+.pt { font: 500 20px/1.2 var(--font-math); white-space: nowrap; }
+.ps { font: 16px/1.2 var(--font-math); color: var(--muted); text-align: right; }
+.canvas-wrap { position: relative; flex: 1; min-height: 0; border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; background: var(--panel); }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.t-badge {
+  position: absolute; top: 10px; right: 12px; pointer-events: none; padding: 2px 8px; border-radius: 4px;
+  font: 500 16px/1.4 var(--font-mono); font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+}
+
+@media (max-width: 960px) {
+  body, .app { height: auto; }
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { overflow: visible; border-right: 0; border-bottom: 1px solid var(--hair); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .stage { grid-template-columns: 1fr; padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+  .canvas-wrap { flex: none; aspect-ratio: 1 / 1; max-width: 100%; }
+}
+</style>
+
+<div class="app">
+  <aside class="side">
+    <header class="brand">
+      <div>
+        <a class="back" id="backLink" href="../" hidden>← Matika na hraní</a>
+        <h1>Konformní zobrazení</h1>
+        <p class="thm"><b>f</b> holomorfní a <b>f′(z₀) ≠ 0</b> ⇒ <b>f</b> v bodě <b>z₀</b> zachovává úhly</p>
+      </div>
+      <button id="themeBtn" class="icon-btn" type="button" title="Přepnout světlý a tmavý režim" aria-label="Přepnout světlý a tmavý režim">◐</button>
+    </header>
+
+    <section>
+      <label class="eyebrow" for="scene">Ukázková scéna</label>
+      <select id="scene"></select>
+    </section>
+
+    <section>
+      <label class="eyebrow" for="fn">Funkce</label>
+      <div class="fn-row" id="fnRow"><span class="fn-pre">f(z) =</span><input id="fn" type="text" spellcheck="false" autocomplete="off" value="z^2"></div>
+      <p class="err" id="fnErr" hidden></p>
+      <div class="chips" id="chips"></div>
+      <div class="sublabel">protipříklady</div>
+      <div class="chips" id="chipsBad"></div>
+      <div class="badge" id="holo"></div>
+      <p class="hint">Enter použije funkci a pustí animaci. Jde psát <code>z</code>, <code>x</code>, <code>y</code>, <code>i</code>, <code>exp</code>, <code>log</code>, <code>sin</code>, <code>sqrt</code>, <code>conj</code>, <code>re</code>, <code>im</code>, <code>abs</code>, <code>gamma</code>, mocniny <code>^</code> a podmínky <code>if(abs(z) &lt; 1; a; b)</code>. Logaritmus, odmocnina a necelé mocniny berou arg z z intervalu [0, 2π), řez je na kladné reálné ose.</p>
+    </section>
+
+    <section>
+      <span class="eyebrow">Animace</span>
+      <div class="transport">
+        <button id="play" class="play" type="button">▶ Přehrát</button>
+        <button id="rewind" class="icon-btn" type="button" title="Zpět na t = 0 (R)" aria-label="Zpět na t = 0">⟲</button>
+      </div>
+      <div class="trow"><input type="range" id="tSlider" min="0" max="1" step="0.001" value="0" aria-label="Parametr t"><output id="tOut">0,00</output></div>
+      <div class="seg" id="speed">
+        <button type="button" data-d="5">pomalu</button><button type="button" data-d="2.6" class="on">normálně</button><button type="button" data-d="1.3">rychle</button>
+      </div>
+      <label class="check"><input type="checkbox" id="autoCam" checked> kamera sleduje obraz</label>
+    </section>
+
+    <section>
+      <span class="eyebrow">Analytické rozšíření</span>
+      <div class="ext-list" id="extList"></div>
+      <p class="hint" id="extNote"></p>
+      <button class="btn ext-btn" id="extBtn" type="button" disabled>Rozšířit</button>
+    </section>
+
+    <section>
+      <span class="eyebrow">Kreslení do roviny z</span>
+      <div class="tools" id="tools">
+        <div class="tool-group">
+          <button class="tool on" type="button" data-tool="free"><svg viewBox="0 0 24 24"><path d="M3 16c2.5-5 5-6 7-2.5S14 18 16 13s3.5-6 5-4.5"/></svg>křivka</button>
+          <button class="tool" type="button" data-tool="line"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><circle cx="5" cy="19" r="1.6"/><circle cx="19" cy="5" r="1.6"/></svg>přímka</button>
+          <button class="tool" type="button" data-tool="circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 12h8"/></svg>kružnice</button>
+          <button class="tool" type="button" data-tool="probe"><svg viewBox="0 0 24 24"><path d="M5 18h14m-3-3 3 3-3 3"/><path d="M5 18 13 6m-3.5.6L13 6l.6 3.6"/></svg>vektory</button>
+        </div>
+        <div class="tool-group three">
+          <button class="tool" type="button" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M9 20h11"/><path d="m4.6 14.6 9.2-9.2a2 2 0 0 1 2.8 0l2.5 2.5a2 2 0 0 1 0 2.8L10.5 19.3H8.2l-3.6-3.6a.8.8 0 0 1 0-1.1Z"/><path d="m9 10.2 5.3 5.3"/></svg>guma</button>
+          <button class="tool" type="button" data-tool="region"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" stroke-dasharray="3 2.5"/></svg>oblast gridu</button>
+          <button class="tool" type="button" data-tool="pan"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg>posun</button>
+        </div>
+      </div>
+      <p class="hint" id="toolHint"></p>
+      <p class="hint">Dvojklik na křivku, vektory nebo grid je vybere a pak s nimi jde táhnout, grid i roztahovat za úchyty. Dalším dvojklikem je pustíš, Delete smaže vybranou křivku nebo vektory. Dvojklik mimo všechno vrátí pohled roviny.</p>
+      <div class="row">
+        <button class="btn" id="undo" type="button" title="Ctrl+Z">Zpět</button>
+        <button class="btn" id="clearCurves" type="button">Smazat křivky</button>
+        <button class="btn" id="clearProbes" type="button">Smazat vektory</button>
+      </div>
+      <label class="check"><input type="checkbox" id="showAngles" checked> úhly v průsečících křivek</label>
+    </section>
+
+    <section>
+      <span class="eyebrow">Vybrané vektory</span>
+      <dl class="info" id="info"></dl>
+      <p class="hint" id="infoEmpty" hidden>Žádné vektory. Vyber nástroj Vektory a klikni do roviny z.</p>
+    </section>
+
+    <section>
+      <span class="eyebrow">Grid</span>
+      <div class="seg" id="gridType">
+        <button type="button" data-g="cart" class="on">kartézský</button><button type="button" data-g="polar">polární</button><button type="button" data-g="none">žádný</button>
+      </div>
+      <div class="ranges">
+        <span>x od</span><input id="gx0" inputmode="decimal" aria-label="x od"><span>do</span><input id="gx1" inputmode="decimal" aria-label="x do">
+        <span>y od</span><input id="gy0" inputmode="decimal" aria-label="y od"><span>do</span><input id="gy1" inputmode="decimal" aria-label="y do">
+        <span id="r0Lab">r₀</span><input id="gr0" inputmode="decimal" aria-label="vnitřní poloměr">
+      </div>
+      <label class="check"><input type="checkbox" id="checker"> šachovnice</label>
+      <div class="row"><button class="btn" id="fitBtn" type="button">Přizpůsobit pohledy</button></div>
+    </section>
+
+    <section class="keys">
+      <span class="eyebrow">Klávesy a myš</span>
+      <div><kbd>Mezerník</kbd> přehrát a pauza · <kbd>R</kbd> zpět na t = 0 · <kbd>←</kbd> <kbd>→</kbd> krok v t · <kbd>Ctrl+Z</kbd> zpět · dvojklik vybere a pustí objekt, mimo objekty vrátí pohled · <kbd>Delete</kbd> smaže vybraný · <kbd>Esc</kbd> zruší výběr · kolečko přibližuje · pravým tlačítkem posun</div>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div class="stagebar">
+      <label class="density" for="density">hustota gridu <input type="range" id="density" min="2" max="30" step="1" value="12"> <output id="densOut">12</output></label>
+      <button class="btn danger" id="resetAll" type="button" title="Prázdný grid bez křivek a vektorů. Ctrl+Z vrátí.">Smazat vše</button>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="pt">Rovina <i>z</i></span><span class="ps">příprava</span></div>
+      <div class="canvas-wrap"><canvas id="cL" aria-label="Rovina z, sem se kreslí"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="pt">Rovina <i>w</i></span><span class="ps"><i>w</i> = (1 − <i>t</i>)·<i>z</i> + <i>t</i>·<i>f</i>(<i>z</i>)</span></div>
+      <div class="canvas-wrap"><canvas id="cR" aria-label="Rovina w, obraz pod funkcí"></canvas><div class="t-badge" id="tBadge">t = 0,00</div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const FONT_UI = '"IBM Plex Sans", system-ui, sans-serif';
+const FONT_MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace';
+const FONT_MATH = '"STIX Two Text", Cambria, "Times New Roman", serif';
+
+// ---------- komplexní čísla jako [re, im] ----------
+const cadd = (a, b) => [a[0] + b[0], a[1] + b[1]];
+const csub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+const cmul = (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
+const cdiv = (a, b) => { const d = b[0] * b[0] + b[1] * b[1]; return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; };
+const cexp = a => { const e = Math.exp(a[0]); return [e * Math.cos(a[1]), e * Math.sin(a[1])]; };
+// větev s arg z ∈ [0, 2π): řez logaritmu a odmocniny je na kladné reálné ose
+const arg2pi = a => { const t = Math.atan2(a[1], a[0]); return t < 0 ? t + 2 * Math.PI : t; };
+const clog = a => [Math.log(Math.hypot(a[0], a[1])), arg2pi(a)];
+const csqrt = a => { const r = Math.sqrt(Math.hypot(a[0], a[1])), h = arg2pi(a) / 2; return [r * Math.cos(h), r * Math.sin(h)]; };
+const csin = a => [Math.sin(a[0]) * Math.cosh(a[1]), Math.cos(a[0]) * Math.sinh(a[1])];
+const ccos = a => [Math.cos(a[0]) * Math.cosh(a[1]), -Math.sin(a[0]) * Math.sinh(a[1])];
+const csinh = a => [Math.sinh(a[0]) * Math.cos(a[1]), Math.cosh(a[0]) * Math.sin(a[1])];
+const ccosh = a => [Math.cosh(a[0]) * Math.cos(a[1]), Math.sinh(a[0]) * Math.sin(a[1])];
+function cpow(a, b) {
+  if (b[1] === 0 && Number.isInteger(b[0]) && Math.abs(b[0]) <= 64) {
+    let n = Math.abs(b[0]), r = [1, 0], base = a;
+    while (n) { if (n & 1) r = cmul(r, base); base = cmul(base, base); n >>= 1; }
+    return b[0] < 0 ? cdiv([1, 0], r) : r;
+  }
+  if (a[0] === 0 && a[1] === 0) return b[0] > 0 ? [0, 0] : [NaN, NaN];
+  return cexp(cmul(b, clog(a)));
+}
+// Γ(z) Lanczosovou aproximací; pro Re z < 1/2 přes Γ(z)Γ(1 − z) = π / sin(πz).
+// Uvnitř stačí hlavní větev logaritmu, protože tam je Re t > 0.
+const LANCZOS = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+  12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+function cgamma(z) {
+  if (z[0] < 0.5) return cdiv([Math.PI, 0], cmul(csin([Math.PI * z[0], Math.PI * z[1]]), cgamma([1 - z[0], -z[1]])));
+  const w = [z[0] - 1, z[1]], t = [w[0] + 7.5, w[1]];
+  let x = [LANCZOS[0], 0];
+  for (let k = 1; k < 9; k++) x = cadd(x, cdiv([LANCZOS[k], 0], [w[0] + k, w[1]]));
+  const logT = [Math.log(Math.hypot(t[0], t[1])), Math.atan2(t[1], t[0])];
+  return cmul([Math.sqrt(2 * Math.PI), 0], cmul(cexp(csub(cmul([w[0] + 0.5, w[1]], logT), t)), x));
+}
+const C_ONE = [1, 0], C_ZERO = [0, 0], C_NAN = [NaN, NaN];
+
+// ---------- parser výrazu f(z) ----------
+const FUNCS = {
+  exp: cexp, log: clog, ln: clog, sqrt: csqrt,
+  sin: csin, cos: ccos, tan: a => cdiv(csin(a), ccos(a)), cot: a => cdiv(ccos(a), csin(a)),
+  sinh: csinh, cosh: ccosh, tanh: a => cdiv(csinh(a), ccosh(a)),
+  conj: a => [a[0], -a[1]], re: a => [a[0], 0], im: a => [a[1], 0],
+  abs: a => [Math.hypot(a[0], a[1]), 0], arg: a => [arg2pi(a), 0], gamma: cgamma,
+};
+const CONSTS = { i: [0, 1], e: [Math.E, 0], pi: [Math.PI, 0] };
+const VARS = ['z', 'x', 'y'];
+const NAMES = [...Object.keys(FUNCS), ...Object.keys(CONSTS), ...VARS, 'if'].sort((a, b) => b.length - a.length);
+
+function tokenize(src) {
+  const s = src.replace(/[−–—]/g, '-').replace(/[·×⋅]/g, '*').replace(/\*\*/g, '^').replace(/π/g, 'pi')
+    .replace(/²/g, '^2').replace(/³/g, '^3').replace(/√/g, 'sqrt').replace(/z̄/g, 'conj(z)').replace(/Γ/g, 'gamma')
+    .replace(/≤/g, '<=').replace(/≥/g, '>=');
+  const raw = [];
+  let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (/\s/.test(ch)) { i++; continue; }
+    const rest = s.slice(i);
+    let m = /^(\d+(?:[.,]\d+)?|\.\d+)/.exec(rest);
+    if (m) { raw.push({ t: 'num', v: [parseFloat(m[0].replace(',', '.')), 0], s: m[0] }); i += m[0].length; continue; }
+    m = /^[a-zA-Z]+/.exec(rest);
+    if (m) {
+      const w = m[0].toLowerCase();
+      let k = 0;
+      while (k < w.length) {
+        const name = NAMES.find(n => w.startsWith(n, k));
+        if (!name) throw new Error(`Neznám „${m[0]}“.`);
+        if (name === 'if') raw.push({ t: 'if', s: name });
+        else if (FUNCS[name]) raw.push({ t: 'func', v: name, s: name });
+        else if (CONSTS[name]) raw.push({ t: 'num', v: CONSTS[name], s: name });
+        else raw.push({ t: 'var', v: name, s: name });
+        k += name.length;
+      }
+      i += m[0].length; continue;
+    }
+    const two = rest.slice(0, 2);
+    if (two === '<=' || two === '>=') { raw.push({ t: two, s: two }); i += 2; continue; }
+    // argumenty if odděluje středník (čárka mezi číslicemi je desetinná)
+    if ('+-*/^()<>;,'.includes(ch)) { raw.push({ t: ch === ',' ? ';' : ch, s: ch }); i++; continue; }
+    throw new Error(`Nečekaný znak „${ch}“.`);
+  }
+  // implicitní násobení: 2z, iz, z(z+1), (z+1)(z-1)
+  const out = [];
+  for (const tk of raw) {
+    const prev = out[out.length - 1];
+    if (prev && (prev.t === 'num' || prev.t === 'var' || prev.t === ')') && (tk.t === 'num' || tk.t === 'var' || tk.t === 'func' || tk.t === 'if' || tk.t === '(')) out.push({ t: 'imp', s: '·' });
+    out.push(tk);
+  }
+  return out;
+}
+
+function compile(src) {
+  if (!src.trim()) throw new Error('Napiš funkci, třeba z^2.');
+  const T = tokenize(src);
+  let p = 0;
+  const is = (...ts) => p < T.length && ts.includes(T[p].t);
+  const take = () => T[p++];
+  const close = () => { if (!is(')')) throw new Error('Chybí „)“.'); take(); };
+  // porovnání reálných částí, výsledek 1 nebo 0 (pro if)
+  function cmp() {
+    const A = add();
+    if (!is('<', '>', '<=', '>=')) return A;
+    const op = take().t, B = add();
+    return z => {
+      const a = A(z)[0], b = B(z)[0];
+      if (!(isFinite(a) && isFinite(b))) return C_NAN;
+      return (op === '<' ? a < b : op === '>' ? a > b : op === '<=' ? a <= b : a >= b) ? C_ONE : C_ZERO;
+    };
+  }
+  function add() {
+    let a = mul();
+    while (is('+', '-')) { const op = take().t, A = a, B = mul(); a = op === '+' ? z => cadd(A(z), B(z)) : z => csub(A(z), B(z)); }
+    return a;
+  }
+  function mul() {
+    let a = unary();
+    while (is('*', '/', 'imp')) { const op = take().t, A = a, B = unary(); a = op === '/' ? z => cdiv(A(z), B(z)) : z => cmul(A(z), B(z)); }
+    return a;
+  }
+  function unary() {
+    if (is('-')) { take(); const A = unary(); return z => { const v = A(z); return [-v[0], -v[1]]; }; }
+    if (is('+')) { take(); return unary(); }
+    return power();
+  }
+  function power() {
+    const A = primary();
+    if (is('^')) { take(); const B = expo(); return z => cpow(A(z), B(z)); }
+    return A;
+  }
+  // exponent bere i implicitní součin: e^iz = e^(iz), e^2z = e^(2z)
+  function expo() {
+    let a = unary();
+    while (is('imp')) { take(); const A = a, B = power(); a = z => cmul(A(z), B(z)); }
+    return a;
+  }
+  function primary() {
+    if (p >= T.length) throw new Error('Výraz končí příliš brzy.');
+    const k = take();
+    if (k.t === 'num') { const v = k.v; return () => v; }
+    if (k.t === 'var') { if (k.v === 'z') return z => z; if (k.v === 'x') return z => [z[0], 0]; return z => [z[1], 0]; }
+    if (k.t === 'func') {
+      const fn = FUNCS[k.v];
+      let A;
+      if (is('(')) { take(); A = cmp(); close(); }
+      else { if (p >= T.length) throw new Error(`Za ${k.v} chybí argument.`); A = power(); }
+      return z => fn(A(z));
+    }
+    // if(podmínka; a; b): kde podmínka neplatí, vrátí b, bez b tam funkce není definovaná
+    if (k.t === 'if') {
+      if (!is('(')) throw new Error('Za if patří závorka: if(podmínka; a; b).');
+      take();
+      const Cnd = cmp();
+      if (!is(';')) throw new Error('V if chybí středník: if(podmínka; a; b).');
+      take();
+      const A = cmp();
+      let B = null;
+      if (is(';')) { take(); B = cmp(); }
+      close();
+      return z => {
+        const c = Cnd(z)[0];
+        if (!isFinite(c)) return C_NAN;
+        return c !== 0 ? A(z) : B ? B(z) : C_NAN;
+      };
+    }
+    if (k.t === '(') { const A = cmp(); close(); return A; }
+    throw new Error(`Na tomhle místě nečekám „${k.s}“.`);
+  }
+  const f = cmp();
+  if (p < T.length) throw new Error(`Na tomhle místě nečekám „${T[p].s}“.`);
+  const r = f([0.31, 0.27]);
+  if (!Array.isArray(r) || r.length !== 2) throw new Error('Výraz nevrací komplexní číslo.');
+  return f;
+}
+
+// ---------- stav ----------
+const K = 6;              // jemnost šachovnice na hranu buňky
+const DEFAULT_GRID = { type: 'cart', x0: -2, x1: 2, y0: -2, y1: 2, r0: 0, n: 12, checker: false };
+let FN = compile('z^2');
+const F = (x, y) => FN([x, y]);
+// selected = vektory v panelu s údaji, sel = objekt vybraný dvojklikem, hover = objekt pod gumou
+const state = {
+  fsrc: 'z^2',
+  grid: { ...DEFAULT_GRID },
+  curves: [], probes: [], inters: [], lines: [], lattice: null, history: [],
+  tol: 0.01, imgBox: null, holo: 'good',
+  t: 0, u: 0, playing: false, dur: 2.6,
+  tool: 'free', selected: null, sel: null, hover: null, showAngles: true, extIdx: null, ext: null,
+  viewL: { cx: 0, cy: 0, s: 100 }, viewR: { cx: 0, cy: 0, s: 100 }, autoCam: true,
+};
+let nextId = 1, colorCounter = 0;
+
+function jac(x, y) {
+  const h = 1e-6 * Math.max(1, Math.abs(x), Math.abs(y)), i2 = 1 / (2 * h);
+  const a = F(x + h, y), b = F(x - h, y), c = F(x, y + h), d = F(x, y - h);
+  return [(a[0] - b[0]) * i2, (c[0] - d[0]) * i2, (a[1] - b[1]) * i2, (c[1] - d[1]) * i2]; // [ux, uy, vx, vy]
+}
+const edom = () => Math.max(state.grid.x1 - state.grid.x0, state.grid.y1 - state.grid.y0);
+const wrapAng = a => { while (a <= -Math.PI) a += 2 * Math.PI; while (a > Math.PI) a -= 2 * Math.PI; return a; };
+const ease = u => u * u * (3 - 2 * u);
+const invEase = t => 0.5 - Math.sin(Math.asin(Math.min(1, Math.max(-1, 1 - 2 * t))) / 3);
+
+// ---------- formát čísel po česku ----------
+function fmtNum(v, d = 2) {
+  if (!isFinite(v)) return '∞';
+  let s = v.toFixed(d);
+  if (/^-0(\.0*)?$/.test(s)) s = s.slice(1);
+  return s.replace('.', ',').replace('-', '−');
+}
+function fmtC(z, d = 2) {
+  if (!isFinite(z[0]) || !isFinite(z[1])) return '∞';
+  const im = Math.abs(z[1]) < 0.5 * 10 ** -d ? 0 : z[1];
+  if (im === 0) return fmtNum(z[0], d);
+  return `${fmtNum(z[0], d)} ${im < 0 ? '−' : '+'} ${fmtNum(Math.abs(im), d)}i`;
+}
+const fmtDeg = v => (Math.abs(v) < 0.05 ? '0,0' : fmtNum(v, 1)) + '°';
+
+// ---------- grid ----------
+// polární grid: střed obdélníku, poloměr = polovina kratší strany
+function polarParams(g) {
+  const R = Math.min(g.x1 - g.x0, g.y1 - g.y0) / 2;
+  return { cx: (g.x0 + g.x1) / 2, cy: (g.y0 + g.y1) / 2, R, r0: Math.min(Math.max(0, g.r0 || 0), R * 0.95) };
+}
+function gridParam(g) {
+  if (g.type === 'polar') {
+    const { cx, cy, R, r0 } = polarParams(g);
+    return (u, v) => { const r = r0 + u * (R - r0), th = -Math.PI + 2 * Math.PI * v; return [cx + r * Math.cos(th), cy + r * Math.sin(th)]; };
+  }
+  return (u, v) => [g.x0 + u * (g.x1 - g.x0), g.y0 + v * (g.y1 - g.y0)];
+}
+// úchyty vybraného gridu (ve světových souřadnicích)
+function gridHandles() {
+  const g = state.grid;
+  if (g.type === 'polar') {
+    const { cx, cy, R, r0 } = polarParams(g), hs = [{ k: 'R', x: cx + R, y: cy }];
+    if (r0 > 0) hs.push({ k: 'r0', x: cx - r0, y: cy });
+    return hs;
+  }
+  const mx = (g.x0 + g.x1) / 2, my = (g.y0 + g.y1) / 2;
+  return [{ k: 'nw', x: g.x0, y: g.y1 }, { k: 'n', x: mx, y: g.y1 }, { k: 'ne', x: g.x1, y: g.y1 }, { k: 'e', x: g.x1, y: my },
+    { k: 'se', x: g.x1, y: g.y0 }, { k: 's', x: mx, y: g.y0 }, { k: 'sw', x: g.x0, y: g.y0 }, { k: 'w', x: g.x0, y: my }];
+}
+const HANDLE_CURSOR = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', R: 'ew-resize', r0: 'ew-resize' };
+// úchyt pod kurzorem v levé rovině (X, Y v pixelech)
+function gridHandleAt(X, Y) {
+  const v = state.viewL, ox = sizeL.w / 2 - v.cx * v.s, oy = sizeL.h / 2 + v.cy * v.s;
+  for (const h of gridHandles()) if (Math.hypot(X - (ox + h.x * v.s), Y - (oy - h.y * v.s)) < 10) return h.k;
+  return null;
+}
+function inGrid(X, Y) {
+  const g = state.grid, w = toWorld(state.viewL, sizeL, X, Y);
+  if (g.type === 'none') return false;
+  if (g.type === 'polar') { const { cx, cy, R, r0 } = polarParams(g), r = Math.hypot(w[0] - cx, w[1] - cy); return r <= R && r >= r0; }
+  return w[0] >= g.x0 && w[0] <= g.x1 && w[1] >= g.y0 && w[1] <= g.y1;
+}
+// nová oblast gridu při tažení úchytu k z původní oblasti g do bodu w
+function stretchGrid(g, k, w) {
+  const min = 0.04 * Math.max(g.x1 - g.x0, g.y1 - g.y0), n = { x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, r0: g.r0 };
+  if (k === 'R' || k === 'r0') {
+    const { cx, cy, R, r0 } = polarParams(g), r = Math.hypot(w[0] - cx, w[1] - cy);
+    if (k === 'r0') n.r0 = Math.min(Math.max(0, r), R - min);
+    else { const R2 = Math.max(r, r0 + min); Object.assign(n, { x0: cx - R2, x1: cx + R2, y0: cy - R2, y1: cy + R2 }); }
+    return n;
+  }
+  if (k.includes('w')) n.x0 = Math.min(w[0], g.x1 - min);
+  if (k.includes('e')) n.x1 = Math.max(w[0], g.x0 + min);
+  if (k.includes('s')) n.y0 = Math.min(w[1], g.y1 - min);
+  if (k.includes('n')) n.y1 = Math.max(w[1], g.y0 + min);
+  return n;
+}
+function gridCounts(g) {
+  if (g.type === 'polar') return [g.n, 2 * g.n];
+  const w = g.x1 - g.x0, h = g.y1 - g.y0, m = Math.max(w, h);
+  return [Math.max(1, Math.round(g.n * w / m)), Math.max(1, Math.round(g.n * h / m))];
+}
+
+function computeLattice() {
+  const g = state.grid, P = gridParam(g), [nu, nv] = gridCounts(g);
+  const NU = nu * K + 1, NV = nv * K + 1, N = NU * NV;
+  const zx = new Float64Array(N), zy = new Float64Array(N), fx = new Float64Array(N), fy = new Float64Array(N);
+  for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
+    const q = P(i / (NU - 1), j / (NV - 1)), w = F(q[0], q[1]), k = i * NV + j;
+    zx[k] = q[0]; zy[k] = q[1]; fx[k] = w[0]; fy[k] = w[1];
+  }
+  state.lattice = { nu, nv, NU, NV, zx, zy, fx, fy, sx: new Float32Array(N), sy: new Float32Array(N), ok: new Uint8Array(N) };
+}
+
+function quantBox(xs, ys, q) {
+  if (xs.length < 2) return null;
+  const ax = Float64Array.from(xs).sort(), ay = Float64Array.from(ys).sort(), n = ax.length;
+  const at = (arr, f) => arr[Math.min(n - 1, Math.max(0, Math.round(f * (n - 1))))];
+  return { x0: at(ax, q), x1: at(ax, 1 - q), y0: at(ay, q), y1: at(ay, 1 - q) };
+}
+function finitePush(xs, ys, x, y) { if (isFinite(x) && isFinite(y) && Math.abs(x) < 1e9 && Math.abs(y) < 1e9) { xs.push(x); ys.push(y); } }
+
+function computeTol() {
+  const L = state.lattice, xs = [], ys = [], st = Math.max(1, Math.floor(L.fx.length / 8000));
+  for (let i = 0; i < L.fx.length; i += st) finitePush(xs, ys, L.fx[i], L.fy[i]);
+  const b = quantBox(xs, ys, 0.02);
+  const E = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) : edom();
+  state.tol = Math.max(E, 1e-9) / 350;
+  // buňky šachovnice, přes které vede řez, se v obrazu nekreslí
+  const { nu, nv, NV, fx, fy } = L, lim2 = (40 * state.tol) ** 2, bad = new Uint8Array(nu * nv);
+  const far = (a, b) => (fx[b] - fx[a]) ** 2 + (fy[b] - fy[a]) ** 2 > lim2;
+  for (let ci = 0; ci < nu; ci++) for (let cj = 0; cj < nv; cj++) {
+    const i0 = ci * K, j0 = cj * K;
+    for (let k = 0; k < K && !bad[ci * nv + cj]; k++) {
+      if (far((i0 + k) * NV + j0, (i0 + k + 1) * NV + j0) || far((i0 + k) * NV + j0 + K, (i0 + k + 1) * NV + j0 + K)
+        || far(i0 * NV + j0 + k, i0 * NV + j0 + k + 1) || far((i0 + K) * NV + j0 + k, (i0 + K) * NV + j0 + k + 1)) bad[ci * nv + cj] = 1;
+    }
+  }
+  L.bad = bad;
+}
+
+// vzorkuje cestu P(s), s ∈ [0, 1], a zjemňuje tam, kde se obraz rychle mění
+function samplePath(P, N0) {
+  const zs = [], fs = [], tol2 = state.tol * state.tol;
+  const p0 = P(0); let f0 = F(p0[0], p0[1]);
+  zs.push(p0[0], p0[1]); fs.push(f0[0], f0[1]);
+  function rec(sa, fa, sb, fb, d) {
+    const fin = isFinite(fa[0]) && isFinite(fa[1]) && isFinite(fb[0]) && isFinite(fb[1]);
+    let jump = false;
+    if (fin) { const dx = fb[0] - fa[0], dy = fb[1] - fa[1], d2 = dx * dx + dy * dy; if (d2 <= tol2) return; jump = d2 > 256 * tol2; }
+    if (d >= 8 || zs.length > 24000) {
+      // ani po zjemnění se skok nezmenšil: řez (log, odmocnina), obraz se tu přeruší, vzor v rovině z ne
+      if (jump) { const pm = P((sa + sb) / 2); zs.push(pm[0], pm[1]); fs.push(NaN, NaN); }
+      return;
+    }
+    if (!fin && d >= 5) return;
+    const sm = (sa + sb) / 2, pm = P(sm), fm = F(pm[0], pm[1]);
+    rec(sa, fa, sm, fm, d + 1);
+    zs.push(pm[0], pm[1]); fs.push(fm[0], fm[1]);
+    rec(sm, fm, sb, fb, d + 1);
+  }
+  for (let k = 1; k <= N0; k++) {
+    const s0 = (k - 1) / N0, s1 = k / N0, p1 = P(s1), f1 = F(p1[0], p1[1]);
+    rec(s0, f0, s1, f1, 0);
+    zs.push(p1[0], p1[1]); fs.push(f1[0], f1[1]);
+    f0 = f1;
+  }
+  return { z: Float64Array.from(zs), f: Float64Array.from(fs) };
+}
+
+function computeLines() {
+  const g = state.grid, lines = [];
+  if (g.type !== 'none') {
+    const P = gridParam(g), [nu, nv] = gridCounts(g), polar = g.type === 'polar';
+    for (let k = 0; k <= nu; k++) {
+      if (polar && k === 0 && !(g.r0 > 0)) continue;
+      const u = k / nu;
+      lines.push({ fam: 0, w: (!polar && (k === 0 || k === nu)) || (polar && k === nu) ? 1 : 0, ...samplePath(s => P(u, s), 160) });
+    }
+    for (let k = 0; k < (polar ? nv : nv + 1); k++) {
+      const v = k / nv;
+      lines.push({ fam: 1, w: !polar && (k === 0 || k === nv) ? 1 : 0, ...samplePath(s => P(s, v), 160) });
+    }
+    if (!polar) {
+      if (g.x0 < 0 && g.x1 > 0) lines.push({ fam: 0, w: 2, ...samplePath(s => [0, g.y0 + s * (g.y1 - g.y0)], 160) });
+      if (g.y0 < 0 && g.y1 > 0) lines.push({ fam: 1, w: 2, ...samplePath(s => [g.x0 + s * (g.x1 - g.x0), 0], 160) });
+    }
+  }
+  state.lines = lines;
+}
+
+// ---------- křivky ----------
+function curveParam(c) {
+  if (c.kind === 'line') return s => [c.a[0] + s * (c.b[0] - c.a[0]), c.a[1] + s * (c.b[1] - c.a[1])];
+  if (c.kind === 'circle') return s => [c.c[0] + c.r * Math.cos(2 * Math.PI * s), c.c[1] + c.r * Math.sin(2 * Math.PI * s)];
+  const p = c.pts, n = p.length - 1;
+  return s => {
+    const x = s * n, k = Math.min(n - 1, Math.max(0, Math.floor(x))), a = x - k;
+    return [p[k][0] + a * (p[k + 1][0] - p[k][0]), p[k][1] + a * (p[k + 1][1] - p[k][1])];
+  };
+}
+const curveSegs = c => c.kind === 'free' ? c.pts.length - 1 : c.kind === 'circle' ? 240 : 1;
+
+function computeCurve(c) {
+  c.P = curveParam(c);
+  const N = curveSegs(c), arr = new Float64Array(2 * (N + 1));
+  for (let k = 0; k <= N; k++) { const q = c.P(k / N); arr[2 * k] = q[0]; arr[2 * k + 1] = q[1]; }
+  c.base = { arr, N };
+  const r = samplePath(c.P, c.kind === 'line' ? 160 : N);
+  c.z = r.z; c.f = r.f;
+}
+
+function tangent(c, s) {
+  const d = c.kind === 'free' ? 2 / (c.pts.length - 1) : 1e-4;
+  let s0 = s - d, s1 = s + d;
+  if (c.kind !== 'circle') { s0 = Math.max(0, s0); s1 = Math.min(1, s1); }
+  const a = c.P(s0), b = c.P(s1), m = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  return [(b[0] - a[0]) / m, (b[1] - a[1]) / m];
+}
+
+// data o f v bodě o.p: obraz, Jacobiho matice a body kousek ve směrech vs (pro kritické body, kde f′ = 0)
+function fillFData(o, vs) {
+  o.fp = F(o.p[0], o.p[1]);
+  o.J = jac(o.p[0], o.p[1]);
+  const eps = 1e-3 * edom();
+  o.q = []; o.fq = [];
+  for (const v of vs) {
+    const m = Math.hypot(v[0], v[1]) || 1, q = [o.p[0] + eps * v[0] / m, o.p[1] + eps * v[1] / m];
+    o.q.push(q); o.fq.push(F(q[0], q[1]));
+  }
+}
+
+// obraz tečného vektoru v pod H_t = (1−t)·id + t·f; kde je derivace nulová, bere se směr ze sečny
+function pushVec(o, k, v, t) {
+  const J = o.J, L = Math.hypot(v[0], v[1]);
+  const jx = (1 - t) * v[0] + t * (J[0] * v[0] + J[1] * v[1]), jy = (1 - t) * v[1] + t * (J[2] * v[0] + J[3] * v[1]);
+  if (isFinite(jx) && isFinite(jy) && Math.hypot(jx, jy) > 1e-7 * L) return [jx, jy, 0];
+  const q = o.q[k], fq = o.fq[k], p = o.p, fp = o.fp;
+  const hx = (q[0] - p[0]) * (1 - t) + (fq[0] - fp[0]) * t, hy = (q[1] - p[1]) * (1 - t) + (fq[1] - fp[1]) * t, m = Math.hypot(hx, hy);
+  if (!(m > 0) || !isFinite(m)) return [0, 0, 1];
+  return [hx / m * 1e-12, hy / m * 1e-12, 1];
+}
+
+function computeIntersections() {
+  const cs = state.curves, out = [], tolD = Math.max(1e-7 * edom(), 3 / state.viewL.s);
+  outer:
+  for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+    const A = cs[i].base, B = cs[j].base;
+    let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+    for (let k = 0; k <= B.N; k++) { const x = B.arr[2 * k], y = B.arr[2 * k + 1]; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
+    for (let a = 0; a < A.N; a++) {
+      const ax = A.arr[2 * a], ay = A.arr[2 * a + 1], rx = A.arr[2 * a + 2] - ax, ry = A.arr[2 * a + 3] - ay;
+      if (Math.max(ax, ax + rx) < bx0 || Math.min(ax, ax + rx) > bx1 || Math.max(ay, ay + ry) < by0 || Math.min(ay, ay + ry) > by1) continue;
+      for (let b = 0; b < B.N; b++) {
+        const bx = B.arr[2 * b], by = B.arr[2 * b + 1], sx = B.arr[2 * b + 2] - bx, sy = B.arr[2 * b + 3] - by;
+        const den = rx * sy - ry * sx;
+        if (den === 0) continue;
+        const qx = bx - ax, qy = by - ay, al = (qx * sy - qy * sx) / den, be = (qx * ry - qy * rx) / den;
+        if (al < 0 || al > 1 || be < 0 || be > 1) continue;
+        const px = ax + al * rx, py = ay + al * ry;
+        if (out.some(o => Math.hypot(o.p[0] - px, o.p[1] - py) < tolD)) continue;
+        out.push({ ci: i, cj: j, p: [px, py], sA: (a + al) / A.N, sB: (b + be) / B.N });
+        if (out.length >= 24) break outer;
+      }
+    }
+  }
+  for (const it of out) {
+    it.dA = tangent(cs[it.ci], it.sA);
+    it.dB = tangent(cs[it.cj], it.sB);
+    it.dL = wrapAng(Math.atan2(it.dB[1], it.dB[0]) - Math.atan2(it.dA[1], it.dA[0]));
+    fillFData(it, [it.dA, it.dB]);
+  }
+  state.inters = out;
+}
+
+function checkHolo() {
+  const L = state.lattice, N = L.zx.length, st = Math.max(1, Math.floor(N / 500));
+  let ok = 0, tot = 0, all = 0, defined = 0;
+  for (let i = 0; i < N; i += st) {
+    all++;
+    if (!isFinite(L.fx[i]) || !isFinite(L.fy[i])) continue;
+    defined++;
+    const J = jac(L.zx[i], L.zy[i]), nrm = Math.abs(J[0]) + Math.abs(J[1]) + Math.abs(J[2]) + Math.abs(J[3]);
+    if (!isFinite(nrm) || nrm > 1e7) continue;
+    tot++;
+    if (Math.abs(J[0] - J[3]) + Math.abs(J[1] + J[2]) <= 1e-5 * nrm + 1e-9) ok++;
+  }
+  const fr = tot ? ok / tot : 1, el = $('#holo'), partial = defined < 0.97 * all;
+  state.holo = fr >= 0.95 ? (partial ? 'warn' : 'good') : fr <= 0.05 ? 'bad' : 'warn';
+  el.className = 'badge ' + state.holo;
+  el.textContent = fr >= 0.95 ? (partial ? 'Holomorfní tam, kde je definovaná. Na zbytku oblasti definovaná není.' : 'Holomorfní. Úhly drží všude, kde f′ ≠ 0.')
+    : fr <= 0.05 ? 'Není holomorfní, Cauchy–Riemann neplatí. Úhly se obecně nezachovají.'
+    : 'Holomorfní jen na části oblasti.';
+}
+
+function computeImgBox() {
+  const xs = [], ys = [], L = state.lattice;
+  const useLattice = state.grid.type !== 'none' || (!state.curves.length && !state.probes.length);
+  if (useLattice) { const st = Math.max(1, Math.floor(L.fx.length / 12000)); for (let i = 0; i < L.fx.length; i += st) finitePush(xs, ys, L.fx[i], L.fy[i]); }
+  for (const c of state.curves) { const st = 2 * Math.max(1, Math.floor(c.f.length / 4000)); for (let k = 0; k < c.f.length; k += st) finitePush(xs, ys, c.f[k], c.f[k + 1]); }
+  for (const pr of state.probes) finitePush(xs, ys, pr.fp[0], pr.fp[1]);
+  const g = state.grid, full = quantBox(xs, ys, 0), robust = quantBox(xs, ys, xs.length > 60 ? 0.015 : 0);
+  // celý obraz, když je omezený; oříznutý jen když ho póly roztáhnou do nekonečna
+  const ok = full && robust && full.x1 - full.x0 <= 2.5 * (robust.x1 - robust.x0) + 1e-9 && full.y1 - full.y0 <= 2.5 * (robust.y1 - robust.y0) + 1e-9;
+  state.imgBox = (ok ? full : robust) || { x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1 };
+}
+
+function recomputeAll() {
+  finishExtension();
+  computeLattice(); computeTol(); computeLines();
+  for (const c of state.curves) computeCurve(c);
+  computeIntersections();
+  for (const pr of state.probes) fillFData(pr, [pr.a, pr.b]);
+  checkHolo(); computeImgBox(); requestDraw();
+}
+
+// ---------- pohledy ----------
+const cL = $('#cL'), cR = $('#cR'), ctxL = cL.getContext('2d'), ctxR = cR.getContext('2d');
+const sizeL = { w: 1, h: 1 }, sizeR = { w: 1, h: 1 };
+let dpr = window.devicePixelRatio || 1;
+
+function fitView(b, W, H, m = 1.14) {
+  let w = Math.max(b.x1 - b.x0, 1e-9), h = Math.max(b.y1 - b.y0, 1e-9);
+  const big = Math.max(w, h); w = Math.max(w, big * 0.05); h = Math.max(h, big * 0.05);
+  return { cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, s: Math.min(W / (w * m), H / (h * m)) };
+}
+function fitLeft() {
+  const g = state.grid, b = { x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1 };
+  const grow = (x, y) => { b.x0 = Math.min(b.x0, x); b.x1 = Math.max(b.x1, x); b.y0 = Math.min(b.y0, y); b.y1 = Math.max(b.y1, y); };
+  for (const c of state.curves) for (let k = 0; k < c.base.arr.length; k += 2) grow(c.base.arr[k], c.base.arr[k + 1]);
+  for (const pr of state.probes) grow(pr.p[0], pr.p[1]);
+  state.viewL = fitView(b, sizeL.w, sizeL.h, 1.12);
+}
+function leftAsRight() {
+  const k = Math.min(sizeR.w, sizeR.h) / Math.max(1, Math.min(sizeL.w, sizeL.h));
+  return { cx: state.viewL.cx, cy: state.viewL.cy, s: state.viewL.s * k };
+}
+const blendView = (a, b, k) => ({ cx: a.cx + (b.cx - a.cx) * k, cy: a.cy + (b.cy - a.cy) * k, s: a.s * Math.pow(b.s / a.s, k) });
+function rightView() {
+  if (!state.autoCam) return state.viewR;
+  const a = leftAsRight();
+  let b = state.imgBox ? fitView(state.imgBox, sizeR.w, sizeR.h) : a;
+  if (state.ext && state.ext.oldBox) b = blendView(fitView(state.ext.oldBox, sizeR.w, sizeR.h), b, state.ext.e);
+  return blendView(a, b, state.t);
+}
+function freezeRight() {
+  if (state.autoCam) { state.viewR = rightView(); state.autoCam = false; $('#autoCam').checked = false; }
+}
+const toWorld = (v, sz, X, Y) => [v.cx + (X - sz.w / 2) / v.s, v.cy - (Y - sz.h / 2) / v.s];
+
+function resizeCanvas(cv, sz, which) {
+  const r = cv.parentElement.getBoundingClientRect(), w = Math.max(1, r.width), h = Math.max(1, r.height);
+  const oldMin = Math.min(sz.w, sz.h);
+  sz.w = w; sz.h = h;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  if (oldMin > 2) {
+    const k = Math.min(w, h) / oldMin;
+    if (which === 'L') state.viewL.s *= k; else if (!state.autoCam) state.viewR.s *= k;
+  }
+}
+
+// ---------- barvy z CSS ----------
+const pal = {};
+function readPalette() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['panel', 'ink', 'muted', 'u-line', 'v-line', 'axis', 'tick', 'vec-a', 'vec-b', 'c1', 'c2', 'c3', 'c4', 'c5', 'warn', 'bad'])
+    pal[k] = cs.getPropertyValue('--' + k).trim();
+  pal.dark = cs.colorScheme === 'dark' || cs.getPropertyValue('color-scheme').trim() === 'dark';
+}
+const curveColor = c => pal['c' + (c.ci % 5 + 1)];
+
+// ---------- kreslení ----------
+function niceStep(raw) { const p = 10 ** Math.floor(Math.log10(raw)), m = raw / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; }
+
+function drawAxes(ctx, sz, v, plane) {
+  const W = sz.w, H = sz.h, s = v.s, ox = W / 2 - v.cx * s, oy = H / 2 + v.cy * s;
+  const step = niceStep(85 / s), dec = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+  ctx.lineWidth = 1; ctx.strokeStyle = pal.axis;
+  ctx.beginPath();
+  if (oy >= 0 && oy <= H) { ctx.moveTo(0, oy); ctx.lineTo(W, oy); }
+  if (ox >= 0 && ox <= W) { ctx.moveTo(ox, 0); ctx.lineTo(ox, H); }
+  ctx.stroke();
+  const ty = Math.min(Math.max(oy, 6), H - 22), tx = Math.min(Math.max(ox, 6), W - 6), labRight = tx > W - 60;
+  ctx.fillStyle = pal.tick; ctx.font = '11px ' + FONT_MONO;
+  ctx.beginPath();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let k = Math.ceil(-ox / s / step); k <= Math.floor((W - ox) / s / step); k++) {
+    if (k === 0) continue;
+    const X = ox + k * step * s;
+    if (X > W - 24 || X < 14) continue;
+    ctx.moveTo(X, ty - 3); ctx.lineTo(X, ty + 3);
+    ctx.fillText(fmtNum(k * step, dec), X, ty + 6);
+  }
+  ctx.textAlign = labRight ? 'right' : 'left'; ctx.textBaseline = 'middle';
+  for (let k = Math.ceil((oy - H) / s / step); k <= Math.floor(oy / s / step); k++) {
+    if (k === 0) continue;
+    const Y = oy - k * step * s, val = k * step;
+    if (Y < 34 || Y > H - 10) continue;
+    ctx.moveTo(tx - 3, Y); ctx.lineTo(tx + 3, Y);
+    const lab = Math.abs(val - 1) < 1e-12 ? 'i' : Math.abs(val + 1) < 1e-12 ? '−i' : fmtNum(val, dec) + 'i';
+    ctx.fillText(lab, labRight ? tx - 7 : tx + 7, Y);
+  }
+  ctx.stroke();
+  ctx.font = 'italic 15px ' + FONT_MATH; ctx.fillStyle = pal.muted;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText('Re ' + plane, W - 10, ty - 5);
+  ctx.textAlign = labRight ? 'right' : 'left'; ctx.textBaseline = 'top'; ctx.fillText('Im ' + plane, labRight ? tx - 10 : tx + 10, 10);
+}
+
+// projde body (z, f) pro dané t a přeruší čáru u nekonečna a velkých skoků (póly, řezy);
+// během rozšíření (f0, e) jde obraz z původních hodnot f0 do nových f; d0 říká, kde byla původní funkce
+// definovaná, a na hranici se čára přeruší, aby se body jedoucí odjinud nespojovaly
+function tracePath(ctx, z, f, t, ox, oy, s, brk2, f0, e, d0) {
+  let pen = false, px = 0, py = 0;
+  for (let k = 0; k < z.length; k += 2) {
+    if (d0 && k > 0 && d0[k >> 1] !== d0[(k >> 1) - 1]) pen = false;
+    let x, y;
+    if (t === 0) { x = z[k]; y = z[k + 1]; }
+    else {
+      let fx = f[k], fy = f[k + 1];
+      if (f0) { fx = f0[k] + (fx - f0[k]) * e; fy = f0[k + 1] + (fy - f0[k + 1]) * e; }
+      x = z[k] + (fx - z[k]) * t; y = z[k + 1] + (fy - z[k + 1]) * t;
+    }
+    const X = ox + x * s, Y = oy - y * s;
+    if (!(X > -1e5 && X < 1e5 && Y > -1e5 && Y < 1e5)) { pen = false; continue; }
+    if (pen) { const dx = X - px, dy = Y - py; if (dx * dx + dy * dy > brk2) ctx.moveTo(X, Y); else ctx.lineTo(X, Y); }
+    else { ctx.moveTo(X, Y); pen = true; }
+    px = X; py = Y;
+  }
+}
+
+const cellIdx = new Int32Array(4 * K);
+function drawChecker(ctx, t, ox, oy, s, brk2, ext) {
+  const L = state.lattice, { NU, NV, nu, nv, zx, zy, fx, fy, sx, sy, ok } = L;
+  const f0x = ext && L.f0x, f0y = ext && L.f0y, e = ext ? ext.e : 1;
+  for (let i = 0; i < zx.length; i++) {
+    let x, y;
+    if (t === 0) { x = zx[i]; y = zy[i]; }
+    else {
+      const ux = f0x ? f0x[i] + (fx[i] - f0x[i]) * e : fx[i], uy = f0y ? f0y[i] + (fy[i] - f0y[i]) * e : fy[i];
+      x = zx[i] + (ux - zx[i]) * t; y = zy[i] + (uy - zy[i]) * t;
+    }
+    const X = ox + x * s, Y = oy - y * s;
+    if (X > -1e5 && X < 1e5 && Y > -1e5 && Y < 1e5) { sx[i] = X; sy[i] = Y; ok[i] = 1; } else ok[i] = 0;
+  }
+  ctx.beginPath();
+  for (let ci = 0; ci < nu; ci++) for (let cj = 0; cj < nv; cj++) {
+    if ((ci + cj) & 1 || (t > 0 && L.bad[ci * nv + cj]) || (f0x && L.mixed[ci * nv + cj])) continue;
+    const i0 = ci * K, j0 = cj * K;
+    let n = 0;
+    for (let k = 0; k < K; k++) cellIdx[n++] = (i0 + k) * NV + j0;
+    for (let k = 0; k < K; k++) cellIdx[n++] = (i0 + K) * NV + j0 + k;
+    for (let k = K; k > 0; k--) cellIdx[n++] = (i0 + k) * NV + j0 + K;
+    for (let k = K; k > 0; k--) cellIdx[n++] = i0 * NV + j0 + k;
+    let good = true;
+    for (let k = 0; k < n && good; k++) {
+      const a = cellIdx[k], b = cellIdx[(k + 1) % n];
+      if (!ok[a]) { good = false; break; }
+      const dx = sx[b] - sx[a], dy = sy[b] - sy[a];
+      if (dx * dx + dy * dy > brk2) good = false;
+    }
+    if (!good) continue;
+    ctx.moveTo(sx[cellIdx[0]], sy[cellIdx[0]]);
+    for (let k = 1; k < n; k++) ctx.lineTo(sx[cellIdx[k]], sy[cellIdx[k]]);
+    ctx.closePath();
+  }
+  ctx.globalAlpha = pal.dark ? 0.11 : 0.07; ctx.fillStyle = pal.ink; ctx.fill(); ctx.globalAlpha = 1;
+}
+
+function arrow(ctx, x0, y0, x1, y1, color, width) {
+  const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy);
+  if (!(L > 0.5)) return;
+  const ux = dx / L, uy = dy / L, hl = Math.min(12, L * 0.45), hw = hl * 0.5;
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1 - ux * hl * 0.7, y1 - uy * hl * 0.7); ctx.stroke();
+  ctx.fillStyle = color; ctx.beginPath();
+  ctx.moveTo(x1, y1); ctx.lineTo(x1 - ux * hl - uy * hw, y1 - uy * hl + ux * hw); ctx.lineTo(x1 - ux * hl + uy * hw, y1 - uy * hl - ux * hw);
+  ctx.closePath(); ctx.fill();
+}
+function label(ctx, text, x, y, color, font, align = 'center') {
+  ctx.font = font; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = 4; ctx.strokeStyle = pal.panel; ctx.strokeText(text, x, y);
+  ctx.fillStyle = color; ctx.fillText(text, x, y);
+}
+// oblouk mezi směry: ta = úhel prvního vektoru ve světě, d = orientovaný úhel k druhému
+function angleMark(ctx, X, Y, ta, d, r, text, color) {
+  ctx.beginPath(); ctx.arc(X, Y, r, -ta, -ta - d, d > 0);
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.stroke();
+  const mid = ta + d / 2, rr = r + 16;
+  label(ctx, text, X + Math.cos(mid) * rr, Y - Math.sin(mid) * rr, color, '600 13px ' + FONT_UI);
+}
+
+function drawPanel(ctx, sz, v, t, side) {
+  const W = sz.w, H = sz.h, s = v.s, ox = W / 2 - v.cx * s, oy = H / 2 + v.cy * s;
+  const brk2 = (0.3 * Math.max(W, H)) ** 2;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = pal.panel; ctx.fillRect(0, 0, W, H);
+  drawAxes(ctx, sz, v, side === 'L' ? 'z' : 'w');
+  ctx.lineJoin = 'round'; ctx.lineCap = 'butt';
+  const ext = side === 'R' ? state.ext : null, e = ext ? ext.e : 1;
+
+  if (state.grid.type !== 'none') {
+    if (state.grid.checker) drawChecker(ctx, t, ox, oy, s, brk2, ext);
+    const widths = [1.1, 1.7, 2.6];
+    ctx.globalAlpha = 0.85;
+    for (const fam of [0, 1]) for (const w of [0, 1, 2]) {
+      ctx.beginPath();
+      let any = false;
+      for (const L of state.lines) if (L.fam === fam && L.w === w) { tracePath(ctx, L.z, L.f, t, ox, oy, s, brk2, ext && L.f0, e, ext && L.d0); any = true; }
+      if (!any) continue;
+      ctx.strokeStyle = fam ? pal['v-line'] : pal['u-line']; ctx.lineWidth = widths[w]; ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    if (side === 'L' && state.sel === 'grid') drawGridSelection(ctx, ox, oy, s);
+  }
+
+  for (const c of state.curves) {
+    ctx.beginPath(); tracePath(ctx, c.z, c.f, t, ox, oy, s, brk2, ext && c.f0, e, ext && c.d0);
+    ctx.lineCap = 'round';
+    if (c === state.hover || c.id === state.sel) {
+      ctx.globalAlpha = c === state.hover ? 0.35 : 0.2; ctx.strokeStyle = c === state.hover ? pal.bad : pal.ink;
+      ctx.lineWidth = 12; ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    ctx.strokeStyle = curveColor(c); ctx.lineWidth = 2.8; ctx.stroke();
+  }
+
+  // během rozšíření se úhly a vektory v obrazu schovají, ukážou se až na konci
+  if (state.showAngles && !ext) for (const it of state.inters) {
+    let P, a, b;
+    if (side === 'L') { P = it.p; a = it.dA; b = it.dB; }
+    else { P = [it.p[0] + (it.fp[0] - it.p[0]) * t, it.p[1] + (it.fp[1] - it.p[1]) * t]; a = pushVec(it, 0, it.dA, t); b = pushVec(it, 1, it.dB, t); }
+    const X = ox + P[0] * s, Y = oy - P[1] * s;
+    if (!(X > -40 && X < W + 40 && Y > -40 && Y < H + 40)) continue;
+    if (a[0] === 0 && a[1] === 0 || b[0] === 0 && b[1] === 0) continue;
+    const ta = Math.atan2(a[1], a[0]), d = wrapAng(Math.atan2(b[1], b[0]) - ta);
+    const shown = side === 'L' ? Math.abs(d) : d * (Math.sign(it.dL) || 1);
+    ctx.fillStyle = pal.ink; ctx.beginPath(); ctx.arc(X, Y, 3, 0, 2 * Math.PI); ctx.fill();
+    angleMark(ctx, X, Y, ta, d, 20, fmtDeg(shown * 180 / Math.PI), pal.ink);
+  }
+
+  if (!ext) for (const pr of state.probes) drawProbe(ctx, sz, pr, t, side, ox, oy, s);
+  if (side === 'L' && drag) drawPreview(ctx, ox, oy, s);
+}
+
+// vybraný grid: čárkovaný okraj a úchyty na roztahování
+function drawGridSelection(ctx, ox, oy, s) {
+  const g = state.grid, S = (x, y) => [ox + x * s, oy - y * s];
+  ctx.save();
+  ctx.strokeStyle = pal.ink; ctx.lineWidth = 1.5; ctx.setLineDash([7, 5]);
+  ctx.beginPath();
+  if (g.type === 'polar') {
+    const { cx, cy, R, r0 } = polarParams(g), c = S(cx, cy);
+    ctx.arc(c[0], c[1], R * s, 0, 2 * Math.PI);
+    if (r0 > 0) { ctx.moveTo(c[0] + r0 * s, c[1]); ctx.arc(c[0], c[1], r0 * s, 0, 2 * Math.PI); }
+  } else {
+    const a = S(g.x0, g.y1), b = S(g.x1, g.y0);
+    ctx.rect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+  for (const h of gridHandles()) {
+    const q = S(h.x, h.y);
+    ctx.fillStyle = pal.panel; ctx.strokeStyle = pal.ink; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.rect(q[0] - 5, q[1] - 5, 10, 10); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawProbe(ctx, sz, pr, t, side, ox, oy, s) {
+  let P, a, b, crit = false;
+  if (side === 'L') { P = pr.p; a = pr.a; b = pr.b; }
+  else {
+    P = [pr.p[0] + (pr.fp[0] - pr.p[0]) * t, pr.p[1] + (pr.fp[1] - pr.p[1]) * t];
+    a = pushVec(pr, 0, pr.a, t); b = pushVec(pr, 1, pr.b, t); crit = !!(a[2] || b[2]);
+  }
+  const X = ox + P[0] * s, Y = oy - P[1] * s;
+  if (!isFinite(X) || !isFinite(Y) || X < -200 || X > sz.w + 200 || Y < -200 || Y > sz.h + 200) return;
+  let A = [a[0] * s, -a[1] * s], B = [b[0] * s, -b[1] * s], note = '';
+  if (side === 'R') {
+    if (crit) {
+      const na = Math.hypot(A[0], A[1]) || 1, nb = Math.hypot(B[0], B[1]) || 1;
+      A = [A[0] / na * 34, A[1] / na * 34]; B = [B[0] / nb * 34, B[1] / nb * 34]; note = 'f′ = 0';
+    } else {
+      const m = Math.max(Math.hypot(A[0], A[1]), Math.hypot(B[0], B[1])), lo = 18, hi = 0.28 * Math.min(sz.w, sz.h);
+      const k = m < lo ? lo / m : m > hi ? hi / m : 1;
+      if (Math.abs(k - 1) > 0.02 && isFinite(k)) { A = [A[0] * k, A[1] * k]; B = [B[0] * k, B[1] * k]; note = k < 1 ? 'zkráceno' : 'prodlouženo'; }
+    }
+  }
+  if (!isFinite(A[0] + A[1] + B[0] + B[1])) return;
+  if (pr === state.hover || pr.id === state.sel) {
+    ctx.globalAlpha = pr === state.hover ? 0.3 : 0.14; ctx.fillStyle = pr === state.hover ? pal.bad : pal.ink;
+    ctx.beginPath(); ctx.arc(X, Y, Math.max(Math.hypot(A[0], A[1]), Math.hypot(B[0], B[1])) + 10, 0, 2 * Math.PI); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  const sel = pr.id === state.selected;
+  ctx.globalAlpha = 0.1; ctx.fillStyle = pal.ink; ctx.beginPath();
+  ctx.moveTo(X, Y); ctx.lineTo(X + A[0], Y + A[1]); ctx.lineTo(X + A[0] + B[0], Y + A[1] + B[1]); ctx.lineTo(X + B[0], Y + B[1]);
+  ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+  arrow(ctx, X, Y, X + A[0], Y + A[1], pal['vec-a'], 2.6);
+  arrow(ctx, X, Y, X + B[0], Y + B[1], pal['vec-b'], 2.6);
+  // úhel ve světových souřadnicích (osa y nahoru)
+  const ta = Math.atan2(-A[1], A[0]), d = wrapAng(Math.atan2(-B[1], B[0]) - ta);
+  const dL = wrapAng(Math.atan2(pr.b[1], pr.b[0]) - Math.atan2(pr.a[1], pr.a[0]));
+  const shown = side === 'L' ? Math.abs(d) : d * (Math.sign(dL) || 1);
+  const r = Math.min(36, Math.max(14, 0.42 * Math.min(Math.hypot(A[0], A[1]), Math.hypot(B[0], B[1]))));
+  angleMark(ctx, X, Y, ta, d, r, fmtDeg(shown * 180 / Math.PI), pal.ink);
+  ctx.fillStyle = pal.ink; ctx.strokeStyle = pal.panel; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(X, Y, 5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+  if (sel) { ctx.globalAlpha = 0.55; ctx.strokeStyle = pal.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(X, Y, 10, 0, 2 * Math.PI); ctx.stroke(); ctx.globalAlpha = 1; }
+  if (side === 'L') {
+    for (const [T, col] of [[A, pal['vec-a']], [B, pal['vec-b']]]) {
+      ctx.fillStyle = pal.panel; ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(X + T[0], Y + T[1], 4.5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    }
+  }
+  if (note) label(ctx, note, X, Y + 22, pal.muted, '11px ' + FONT_UI);
+}
+
+function drawPreview(ctx, ox, oy, s) {
+  const S = p => [ox + p[0] * s, oy - p[1] * s];
+  ctx.strokeStyle = pal.ink; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.setLineDash([]);
+  if (drag.kind === 'free' && drag.pts.length > 1) {
+    ctx.beginPath(); drag.pts.forEach((p, i) => { const q = S(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.stroke();
+  } else if (drag.kind === 'line') {
+    const a = S(drag.a), b = S(drag.b); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  } else if (drag.kind === 'circle') {
+    const c = S(drag.c); ctx.beginPath(); ctx.arc(c[0], c[1], drag.r * s, 0, 2 * Math.PI); ctx.stroke();
+  } else if (drag.kind === 'region') {
+    const a = S(drag.a), b = S(drag.b); ctx.setLineDash([6, 5]); ctx.strokeRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])); ctx.setLineDash([]);
+  }
+}
+
+// ---------- smyčka ----------
+let raf = 0, lastTs = 0;
+function requestDraw() { if (!raf) raf = requestAnimationFrame(frame); }
+function frame() {
+  raf = 0;
+  if (state.playing) {
+    const now = performance.now(), dt = Math.min(0.05, (now - lastTs) / 1000);
+    lastTs = now;
+    state.u = Math.min(1, state.u + dt / state.dur);
+    state.t = ease(state.u);
+    if (state.u >= 1) { state.playing = false; state.t = 1; }
+    syncTransport();
+  }
+  if (state.ext) {
+    const now = performance.now(), dt = Math.min(0.05, (now - lastTs) / 1000);
+    lastTs = now;
+    state.ext.u = Math.min(1, state.ext.u + dt / state.dur);
+    state.ext.e = ease(state.ext.u);
+  }
+  drawPanel(ctxL, sizeL, state.viewL, 0, 'L');
+  drawPanel(ctxR, sizeR, rightView(), state.t, 'R');
+  if (state.ext && state.ext.u >= 1) { finishExtension(); requestDraw(); }
+  updateInfo();
+  if (state.playing || state.ext) requestDraw();
+}
+
+function syncTransport() {
+  const tt = fmtNum(state.t, 2);
+  $('#tSlider').value = state.t; $('#tOut').textContent = tt; $('#tBadge').textContent = 't = ' + tt;
+  $('#play').textContent = state.playing ? '❚❚ Pauza' : state.t >= 1 ? '▶ Znovu' : '▶ Přehrát';
+}
+function setT(t) { state.t = Math.min(1, Math.max(0, t)); state.u = invEase(state.t); syncTransport(); requestDraw(); }
+function togglePlay() {
+  finishExtension();
+  if (state.playing) { state.playing = false; }
+  else { if (state.t >= 1) { state.t = 0; state.u = 0; } state.playing = true; lastTs = performance.now(); }
+  syncTransport(); requestDraw();
+}
+function pause() { if (state.playing) { state.playing = false; syncTransport(); } }
+
+// ---------- panel s údaji o vektorech ----------
+let infoHtml = '';
+function updateInfo() {
+  const pr = state.probes.find(p => p.id === state.selected) || state.probes[0];
+  $('#infoEmpty').hidden = !!pr;
+  let html = '';
+  if (pr) {
+    const J = pr.J, nrm = Math.abs(J[0]) + Math.abs(J[1]) + Math.abs(J[2]) + Math.abs(J[3]);
+    const holoHere = isFinite(nrm) && Math.abs(J[0] - J[3]) + Math.abs(J[1] + J[2]) <= 1e-5 * nrm + 1e-9;
+    const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+    html += row('z₀', fmtC(pr.p)) + row('f(z₀)', fmtC(pr.fp));
+    let note = '';
+    if (!isFinite(nrm)) html += row('f′(z₀)', 'neexistuje');
+    else if (holoHere) {
+      const df = [J[0], J[2]], m = Math.hypot(df[0], df[1]);
+      html += row('f′(z₀)', fmtC(df));
+      if (m < 1e-9) note = 'Kritický bod, f′(z₀) = 0. Tady se úhly nezachovají, násobí se.';
+      else html += row('natažení |f′|', fmtNum(m, 3) + '×') + row('otočení arg f′', fmtDeg(Math.atan2(df[1], df[0]) * 180 / Math.PI));
+    } else {
+      html += row('f′(z₀)', 'neexistuje') + row('Jacobiho matice', `(${fmtNum(J[0])}; ${fmtNum(J[1])} | ${fmtNum(J[2])}; ${fmtNum(J[3])})`);
+      note = 'Cauchy–Riemann tu neplatí, matice není otočení se změnou měřítka.';
+    }
+    const dL = wrapAng(Math.atan2(pr.b[1], pr.b[0]) - Math.atan2(pr.a[1], pr.a[0]));
+    const a = pushVec(pr, 0, pr.a, state.t), b = pushVec(pr, 1, pr.b, state.t);
+    const dR = wrapAng(Math.atan2(b[1], b[0]) - Math.atan2(a[1], a[0])) * (Math.sign(dL) || 1);
+    html += row('úhel v rovině z', fmtDeg(Math.abs(dL) * 180 / Math.PI));
+    html += row(`úhel v rovině w (t = ${fmtNum(state.t, 2)})`, (a[0] || a[1]) && (b[0] || b[1]) ? fmtDeg(dR * 180 / Math.PI) : '–');
+    if (note) html += `<dd class="note">${note}</dd>`;
+  }
+  if (html !== infoHtml) { $('#info').innerHTML = html; infoHtml = html; }
+}
+
+// ---------- úpravy obsahu ----------
+function makeCurve(d) {
+  const c = { id: d.id ?? nextId++, kind: d.kind, ci: d.ci ?? colorCounter++ };
+  if (d.kind === 'free') c.pts = d.pts.map(q => [q[0], q[1]]);
+  else if (d.kind === 'line') { c.a = [...d.a]; c.b = [...d.b]; }
+  else { c.c = [...d.c]; c.r = d.r; }
+  computeCurve(c);
+  return c;
+}
+function makeProbe(p, a, b) { const pr = { id: nextId++, p: [...p], a: [...a], b: [...b] }; fillFData(pr, [pr.a, pr.b]); return pr; }
+
+// posunutá kopie křivky se stejným id; křivky se na místě nemění, aby je Zpět mohlo vrátit
+function shiftedCurve(c, dx, dy) {
+  const sh = q => [q[0] + dx, q[1] + dy];
+  if (c.kind === 'free') return makeCurve({ id: c.id, ci: c.ci, kind: 'free', pts: c.pts.map(sh) });
+  if (c.kind === 'line') return makeCurve({ id: c.id, ci: c.ci, kind: 'line', a: sh(c.a), b: sh(c.b) });
+  return makeCurve({ id: c.id, ci: c.ci, kind: 'circle', c: sh(c.c), r: c.r });
+}
+// grid jde vybrat dvojklikem jako ostatní objekty, má id 'grid'
+const GRID = { id: 'grid', isGrid: true };
+const findObj = id => id == null ? null : id === 'grid' ? (state.grid.type !== 'none' ? GRID : null)
+  : state.curves.find(c => c.id === id) || state.probes.find(p => p.id === id) || null;
+
+// Zpět: před každou změnou objektů se uloží jejich stav
+function pushUndo() {
+  state.history.push({ curves: state.curves.slice(), probes: state.probes.map(p => ({ id: p.id, p: [...p.p], a: [...p.a], b: [...p.b] })), grid: { ...state.grid } });
+  if (state.history.length > 100) state.history.shift();
+}
+function undo() {
+  const h = state.history.pop();
+  if (!h) return;
+  state.curves = h.curves; state.probes = h.probes; state.grid = h.grid;
+  if (!findObj(state.sel)) state.sel = null;
+  syncGridUI(); recomputeAll();
+}
+function objectsChanged() {
+  if (!findObj(state.sel)) state.sel = null;
+  if (!state.probes.some(p => p.id === state.selected)) state.selected = null;
+  computeIntersections(); computeImgBox(); requestDraw();
+}
+function addCurve(d) {
+  pushUndo();
+  state.curves.push(makeCurve(d));
+  objectsChanged();
+}
+function addProbe(p, a, b) {
+  pushUndo();
+  const pr = makeProbe(p, a, b);
+  state.probes.push(pr);
+  if (state.probes.length > 10) state.probes.shift();
+  state.selected = pr.id; objectsChanged();
+  return pr;
+}
+function removeObject(o) {
+  state.curves = state.curves.filter(c => c !== o);
+  state.probes = state.probes.filter(p => p !== o);
+}
+function deleteSelected() {
+  if (state.sel === 'grid') return;
+  const o = findObj(state.sel) || findObj(state.selected);
+  if (!o) return;
+  pushUndo(); removeObject(o); objectsChanged();
+}
+function resetAll() {
+  pushUndo(); pause();
+  state.curves = []; state.probes = []; colorCounter = 0;
+  state.grid = { ...DEFAULT_GRID, n: state.grid.n };
+  state.autoCam = true; $('#autoCam').checked = true;
+  syncGridUI(); recomputeAll(); fitLeft(); objectsChanged(); setT(0);
+}
+
+function applyFunction(src, quiet, keepT) {
+  let f;
+  try { f = compile(src); }
+  catch (e) {
+    if (!quiet) { $('#fnErr').textContent = e.message; $('#fnErr').hidden = false; $('#fnRow').classList.add('bad'); }
+    return false;
+  }
+  FN = f; state.fsrc = src.trim();
+  $('#fnErr').hidden = true; $('#fnRow').classList.remove('bad');
+  markChips();
+  if (!keepT) { pause(); setT(0); }
+  recomputeAll(); syncExtUI();
+  return true;
+}
+
+function setGrid(patch, refit) {
+  Object.assign(state.grid, patch);
+  syncGridUI(); recomputeAll(); if (refit) fitLeft();
+}
+function syncGridUI() {
+  const g = state.grid;
+  document.querySelectorAll('#gridType button').forEach(b => b.classList.toggle('on', b.dataset.g === g.type));
+  $('#density').value = g.n; $('#densOut').textContent = g.n; $('#checker').checked = g.checker;
+  const r = v => String(+v.toFixed(3)).replace('.', ',');
+  $('#gx0').value = r(g.x0); $('#gx1').value = r(g.x1); $('#gy0').value = r(g.y0); $('#gy1').value = r(g.y1); $('#gr0').value = r(g.r0 || 0);
+  $('#gr0').hidden = $('#r0Lab').hidden = g.type !== 'polar';
+}
+
+// ---------- scény ----------
+const pol = (r, deg) => [r * Math.cos(deg * Math.PI / 180), r * Math.sin(deg * Math.PI / 180)];
+const SCENES = [
+  { name: 'z² · úhly drží', f: 'z^2', grid: { type: 'cart', x0: 0.2, x1: 1.8, y0: -1.2, y1: 1.2, r0: 0, n: 12, checker: false },
+    curves: [{ kind: 'circle', c: [0.9, 0.35], r: 0.45 }, { kind: 'line', a: [0.35, -0.95], b: [1.65, 0.95] }],
+    probes: [{ p: [1.25, -0.5], deg: [0, 60], len: 0.3 }] },
+  { name: 'z² v nule · úhel se zdvojí', f: 'z^2', grid: { type: 'cart', x0: -1.4, x1: 1.4, y0: -1.4, y1: 1.4, r0: 0, n: 12, checker: false },
+    curves: [{ kind: 'line', a: pol(-1.3, 20), b: pol(1.3, 20) }, { kind: 'line', a: pol(-1.3, 65), b: pol(1.3, 65) }],
+    probes: [{ p: [0, 0], deg: [110, 155], len: 0.35 }, { p: [0.75, -0.7], deg: [20, 65], len: 0.25 }] },
+  { name: 'eᶻ · pás na mezikruží', f: 'exp(z)', grid: { type: 'cart', x0: -1, x1: 1, y0: -3, y1: 3, r0: 0, n: 14, checker: false },
+    curves: [{ kind: 'circle', c: [0, 0.8], r: 0.55 }, { kind: 'line', a: [-0.9, -2.2], b: [0.9, 0.6] }],
+    probes: [{ p: [0.3, -1.2], deg: [0, 60], len: 0.3 }] },
+  { name: '1/z · přímky na kružnice', f: '1/z', grid: { type: 'cart', x0: -2, x1: 2, y0: -2, y1: 2, r0: 0, n: 12, checker: false },
+    curves: [{ kind: 'line', a: [-1.8, 0.6], b: [1.8, 0.6] }, { kind: 'circle', c: [0.7, 0.15], r: 0.6 }],
+    probes: [{ p: [1, 0.9], deg: [0, 60], len: 0.3 }] },
+  { name: 'Möbius · polorovina na kruh', f: '(z-i)/(z+i)', grid: { type: 'cart', x0: -3, x1: 3, y0: 0, y1: 3, r0: 0, n: 14, checker: false },
+    curves: [{ kind: 'circle', c: [0, 1.2], r: 0.7 }, { kind: 'line', a: [-2.5, 0.4], b: [2, 2.6] }],
+    probes: [{ p: [0.8, 0.8], deg: [0, 60], len: 0.3 }] },
+  { name: 'Žukovskij · kružnice na profil křídla', f: 'z+1/z', grid: { type: 'polar', x0: -2.4, x1: 2.4, y0: -2.4, y1: 2.4, r0: 1, n: 10, checker: false },
+    curves: [{ kind: 'circle', c: [-0.12, 0.12], r: Math.hypot(1.12, 0.12) }, { kind: 'line', a: [0, -2.2], b: [1.6, 1.6] }],
+    probes: [{ p: [1.5, 0.9], deg: [0, 60], len: 0.3 }] },
+  { name: 'sin z · pás na rovinu', f: 'sin(z)', grid: { type: 'cart', x0: -Math.PI / 2, x1: Math.PI / 2, y0: -1.2, y1: 1.2, r0: 0, n: 12, checker: false },
+    curves: [{ kind: 'circle', c: [0.3, 0.2], r: 0.5 }, { kind: 'line', a: [-1.3, -1], b: [1.2, 0.9] }],
+    probes: [{ p: [0.7, 0.5], deg: [0, 60], len: 0.3 }] },
+  { name: 'z̄ · protipříklad, úhel se překlopí', f: 'conj(z)', grid: { type: 'cart', x0: -2, x1: 2, y0: -2, y1: 2, r0: 0, n: 10, checker: false },
+    curves: [{ kind: 'circle', c: [-0.4, 0.3], r: 0.8 }, { kind: 'line', a: [-1.6, -1.2], b: [1.4, 1.3] }],
+    probes: [{ p: [0.8, -0.6], deg: [0, 60], len: 0.35 }] },
+  { name: 'x + 2iy · protipříklad, úhly se mění', f: 'x + 2i y', grid: { type: 'cart', x0: -1.5, x1: 1.5, y0: -1.5, y1: 1.5, r0: 0, n: 12, checker: true },
+    curves: [{ kind: 'circle', c: [0, 0], r: 0.8 }, { kind: 'line', a: [-1.3, -1.3], b: [1.3, 1.3] }],
+    probes: [{ p: [-0.6, 0.5], deg: [0, 45], len: 0.3 }] },
+  { name: 'Prázdná rovina', f: 'z^2', grid: { ...DEFAULT_GRID }, curves: [], probes: [] },
+];
+
+function loadScene(sc) {
+  pause();
+  try { FN = compile(sc.f); state.fsrc = sc.f; } catch (e) { FN = compile('z^2'); state.fsrc = 'z^2'; }
+  $('#fn').value = state.fsrc; $('#fnErr').hidden = true; $('#fnRow').classList.remove('bad');
+  state.grid = { ...sc.grid };
+  computeLattice(); computeTol();
+  colorCounter = 0;
+  state.curves = sc.curves.map(makeCurve);
+  state.probes = (sc.probes || []).map(p => p.deg ? makeProbe(p.p, pol(p.len, p.deg[0]), pol(p.len, p.deg[1])) : makeProbe(p.p, p.a, p.b));
+  state.history = []; state.sel = null; state.selected = state.probes[0]?.id ?? null;
+  state.extIdx = sc.extIdx ?? null;
+  syncGridUI(); markChips();
+  fitLeft(); recomputeAll(); syncExtUI();
+  state.autoCam = true; $('#autoCam').checked = true;
+  setT(0);
+}
+
+// ---------- analytické rozšíření ----------
+// f je zadaná jen na části roviny (nebo tam jen holomorfní), ext je její jediné holomorfní rozšíření
+const EXTENSIONS = [
+  { label: 'Σ z<sup>n</sup>', dom: '|z| < 1', extLabel: '1/(1 − z)',
+    note: 'Řada konverguje jen pro |z| < 1 a tam se rovná 1/(1 − z). Rozšíření má jediný pól v z = 1.',
+    f: 'if(abs(z) < 1; 1/(1-z))', ext: '1/(1-z)',
+    region: { x0: -2.1, x1: 2.1, y0: -2.1, y1: 2.1 }, curves: [{ kind: 'circle', c: [-0.6, 0.4], r: 0.7 }] },
+  { label: 'Σ (−1)<sup>n</sup> z<sup>2n</sup>', dom: '|z| < 1', extLabel: '1/(1 + z²)',
+    note: 'Řada konverguje jen pro |z| < 1, i když 1/(1 + x²) je na reálné ose všude hladká. Dál ji nepustí póly ±i.',
+    f: 'if(abs(z) < 1; 1/(1+z^2))', ext: '1/(1+z^2)',
+    region: { x0: -2.1, x1: 2.1, y0: -2.1, y1: 2.1 }, curves: [{ kind: 'line', a: [-1.8, -0.5], b: [1.8, 0.7] }] },
+  { label: '∫<sub>0</sub><sup>∞</sup> e<sup>−zt</sup> dt', dom: 'Re z > 0', extLabel: '1/z',
+    note: 'Integrál konverguje jen pro Re z > 0 a vyjde 1/z. Rozšíření 1/z žije na celé rovině kromě nuly.',
+    f: 'if(re(z) > 0; 1/z)', ext: '1/z',
+    region: { x0: -2, x1: 2, y0: -2, y1: 2 }, curves: [{ kind: 'circle', c: [0.3, 0.2], r: 0.8 }] },
+  { label: 'Γ(z) = ∫<sub>0</sub><sup>∞</sup> t<sup>z−1</sup> e<sup>−t</sup> dt', dom: 'Re z > 0', extLabel: 'Γ(z)',
+    note: 'Integrál konverguje jen pro Re z > 0. Rozšíření je Γ na celé rovině s póly v 0, −1, −2, …',
+    f: 'if(re(z) > 0; gamma(z))', ext: 'gamma(z)',
+    region: { x0: -3.5, x1: 3.5, y0: -1.5, y1: 1.5 }, curves: [{ kind: 'line', a: [-3.2, 0.6], b: [3.2, 0.9] }] },
+  { label: 'z<sup>2</sup> v kruhu, (z/|z|)<sup>2</sup> venku', dom: '|z| < 1', extLabel: 'z²',
+    note: 'Venku funkce není holomorfní, kruh z |z| > 1 slisuje na jednotkovou kružnici. V kruhu se shoduje se z², takže jediné holomorfní rozšíření je z².',
+    f: 'if(abs(z) < 1; z^2; (z/abs(z))^2)', ext: 'z^2',
+    region: { x0: -2, x1: 2, y0: -2, y1: 2 }, curves: [{ kind: 'circle', c: [0.5, 0.3], r: 0.9 }] },
+];
+// příklad mění jen oblast gridu; typ, hustotu a šachovnici nechá, jak je nastavené
+function loadExtension(i) {
+  const ex = EXTENSIONS[i];
+  loadScene({ f: ex.f, grid: { ...state.grid, ...ex.region }, curves: ex.curves, probes: [], extIdx: i });
+}
+function syncExtUI() {
+  let ex = EXTENSIONS[state.extIdx];
+  if (ex && norm(state.fsrc) !== norm(ex.f) && norm(state.fsrc) !== norm(ex.ext)) { state.extIdx = null; ex = null; }
+  document.querySelectorAll('.ext-item').forEach((b, i) => b.classList.toggle('on', i === state.extIdx));
+  const btn = $('#extBtn');
+  btn.disabled = !ex;
+  btn.textContent = !ex ? 'Rozšířit' : norm(state.fsrc) === norm(ex.ext) ? 'Vrátit původní' : `Rozšířit na ${ex.extLabel}`;
+  $('#extNote').textContent = ex ? ex.note : 'Vyber příklad. Funkce je zadaná jen na části roviny nebo tam není holomorfní.';
+}
+function finishExtension() {
+  if (!state.ext) return;
+  state.ext = null;
+  for (const L of state.lines) L.f0 = L.d0 = null;
+  for (const c of state.curves) c.f0 = c.d0 = null;
+  if (state.lattice) state.lattice.f0x = state.lattice.f0y = state.lattice.mixed = null;
+}
+// Rozšířit: hotová část obrazu stojí, zbytek doteče ze svého místa v rovině z; druhý stisk vrátí původní funkci
+function extend() {
+  const ex = EXTENSIONS[state.extIdx];
+  if (!ex) return;
+  if (norm(state.fsrc) === norm(ex.ext)) { $('#fn').value = ex.f; applyFunction(ex.f, false, true); return; }
+  const oldFN = FN, oldBox = state.imgBox && { ...state.imgBox }, t0 = state.t;
+  pause();
+  $('#fn').value = ex.ext;
+  applyFunction(ex.ext, false, true);
+  if (t0 === 0) { togglePlay(); return; }
+  const defined = w => isFinite(w[0]) && isFinite(w[1]);
+  const from = o => {
+    const z = o.z, f0 = new Float64Array(z.length), d0 = new Uint8Array(z.length / 2);
+    for (let k = 0; k < z.length; k += 2) {
+      const w = oldFN([z[k], z[k + 1]]), ok = defined(w);
+      f0[k] = ok ? w[0] : z[k]; f0[k + 1] = ok ? w[1] : z[k + 1]; d0[k >> 1] = ok;
+    }
+    o.f0 = f0; o.d0 = d0;
+  };
+  state.lines.forEach(from); state.curves.forEach(from);
+  const Lt = state.lattice, n = Lt.zx.length, d = new Uint8Array(n);
+  Lt.f0x = new Float64Array(n); Lt.f0y = new Float64Array(n); Lt.mixed = new Uint8Array(Lt.nu * Lt.nv);
+  for (let i = 0; i < n; i++) {
+    const w = oldFN([Lt.zx[i], Lt.zy[i]]), ok = defined(w);
+    Lt.f0x[i] = ok ? w[0] : Lt.zx[i]; Lt.f0y[i] = ok ? w[1] : Lt.zy[i]; d[i] = ok;
+  }
+  // buňky, které leží zčásti v původní oblasti a zčásti mimo ni, se během animace nekreslí
+  for (let ci = 0; ci < Lt.nu; ci++) for (let cj = 0; cj < Lt.nv; cj++) {
+    const first = d[ci * K * Lt.NV + cj * K];
+    for (let a = 0; a <= K && !Lt.mixed[ci * Lt.nv + cj]; a++) for (let b = 0; b <= K; b++)
+      if (d[(ci * K + a) * Lt.NV + cj * K + b] !== first) { Lt.mixed[ci * Lt.nv + cj] = 1; break; }
+  }
+  state.ext = { u: 0, e: 0, oldBox };
+  lastTs = performance.now(); requestDraw();
+}
+
+// ---------- vstup myší na levé rovině ----------
+let drag = null;
+const evPos = (e, cv) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+function hitProbe(X, Y) {
+  const v = state.viewL, s = v.s, ox = sizeL.w / 2 - v.cx * s, oy = sizeL.h / 2 + v.cy * s;
+  for (let i = state.probes.length - 1; i >= 0; i--) {
+    const pr = state.probes[i], PX = ox + pr.p[0] * s, PY = oy - pr.p[1] * s;
+    for (const part of ['a', 'b']) {
+      const tx = PX + pr[part][0] * s, ty = PY - pr[part][1] * s;
+      if (Math.hypot(X - tx, Y - ty) < 11) return { probe: pr, part };
+    }
+    if (Math.hypot(X - PX, Y - PY) < 11) return { probe: pr, part: 'base' };
+  }
+  return null;
+}
+const TOOL_CURSOR = { free: 'crosshair', line: 'crosshair', circle: 'crosshair', probe: 'copy', erase: 'crosshair', region: 'crosshair', pan: 'grab' };
+function segDist(x, y, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+  const u = L ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L)) : 0;
+  return Math.hypot(x - ax - u * dx, y - ay - u * dy);
+}
+// leží bod (X, Y) v pixelech blízko objektu v levé rovině?
+function nearObject(o, X, Y) {
+  if (o.isGrid) return inGrid(X, Y) || !!gridHandleAt(X, Y);
+  const v = state.viewL, s = v.s, ox = sizeL.w / 2 - v.cx * s, oy = sizeL.h / 2 + v.cy * s;
+  if (!o.kind) {
+    const PX = ox + o.p[0] * s, PY = oy - o.p[1] * s;
+    return Math.hypot(X - PX, Y - PY) < 11 || [o.a, o.b].some(w => segDist(X, Y, PX, PY, PX + w[0] * s, PY - w[1] * s) < 8);
+  }
+  const z = o.z;
+  for (let k = 2; k < z.length; k += 2) if (segDist(X, Y, ox + z[k - 2] * s, oy - z[k - 1] * s, ox + z[k] * s, oy - z[k + 1] * s) < 8) return true;
+  return false;
+}
+// co leží pod kurzorem: vektory mají přednost, z křivek ta naposledy nakreslená
+function hitObject(X, Y) {
+  for (let i = state.probes.length - 1; i >= 0; i--) if (nearObject(state.probes[i], X, Y)) return state.probes[i];
+  for (let i = state.curves.length - 1; i >= 0; i--) if (nearObject(state.curves[i], X, Y)) return state.curves[i];
+  return null;
+}
+function eraseAt(X, Y) {
+  const o = hitObject(X, Y);
+  if (!o) return;
+  if (!drag.pushed) { pushUndo(); drag.pushed = true; }
+  removeObject(o); state.hover = null; objectsChanged();
+}
+// posun vybraného objektu nebo roztažení gridu, přepočet nejvýš jednou za snímek
+let movePending = false;
+function applyMove() {
+  movePending = false;
+  if (!drag) return;
+  if (drag.kind === 'stretch') { if (drag.target) { Object.assign(state.grid, drag.target); syncGridUI(); recomputeAll(); } return; }
+  if (drag.kind !== 'move') return;
+  const o = findObj(drag.id);
+  if (!o) return;
+  if (o.isGrid) {
+    const g = drag.orig;
+    Object.assign(state.grid, { x0: g.x0 + drag.dx, x1: g.x1 + drag.dx, y0: g.y0 + drag.dy, y1: g.y1 + drag.dy });
+    syncGridUI(); recomputeAll(); return;
+  }
+  if (o.kind) state.curves[state.curves.indexOf(o)] = shiftedCurve(drag.orig, drag.dx, drag.dy);
+  else { o.p = [drag.orig.p[0] + drag.dx, drag.orig.p[1] + drag.dy]; fillFData(o, [o.a, o.b]); }
+  objectsChanged();
+}
+
+cL.addEventListener('pointerdown', e => {
+  const [X, Y] = evPos(e, cL), w = toWorld(state.viewL, sizeL, X, Y);
+  cL.setPointerCapture(e.pointerId);
+  if (e.button === 1 || e.button === 2 || (e.button === 0 && state.tool === 'pan')) {
+    drag = { kind: 'pan', X, Y, cx: state.viewL.cx, cy: state.viewL.cy }; cL.style.cursor = 'grabbing'; return;
+  }
+  if (e.button !== 0) return;
+  if (state.tool === 'erase') { drag = { kind: 'erase', pushed: false }; eraseAt(X, Y); return; }
+  const sel = findObj(state.sel);
+  const handle = sel && sel.isGrid && gridHandleAt(X, Y);
+  if (handle) { drag = { kind: 'stretch', k: handle, orig: { ...state.grid }, pushed: false }; return; }
+  if (sel && nearObject(sel, X, Y)) {
+    drag = { kind: 'move', id: sel.id, orig: sel.isGrid ? { ...state.grid } : sel.kind ? sel : { p: [...sel.p] }, w0: w, dx: 0, dy: 0, pushed: false };
+    cL.style.cursor = 'grabbing'; return;
+  }
+  const hit = hitProbe(X, Y);
+  if (hit) { state.selected = hit.probe.id; drag = { kind: 'probe', part: hit.part, probe: hit.probe, pushed: false }; cL.style.cursor = 'grabbing'; requestDraw(); return; }
+  const L = 60 / state.viewL.s;
+  switch (state.tool) {
+    case 'free': drag = { kind: 'free', pts: [w] }; break;
+    case 'line': drag = { kind: 'line', a: w, b: w }; break;
+    case 'circle': drag = { kind: 'circle', c: w, r: 0 }; break;
+    case 'region': drag = { kind: 'region', a: w, b: w }; break;
+    case 'probe': {
+      const pr = addProbe(w, [L, 0], pol(L, 60));
+      lastProbe = { id: pr.id, time: performance.now() };
+      drag = { kind: 'probe', part: 'base', probe: pr, pushed: true }; break;
+    }
+  }
+  requestDraw();
+});
+cL.addEventListener('pointermove', e => {
+  const [X, Y] = evPos(e, cL), w = toWorld(state.viewL, sizeL, X, Y);
+  if (!drag) {
+    if (state.tool === 'erase') {
+      const o = hitObject(X, Y);
+      if (o !== state.hover) { state.hover = o; requestDraw(); }
+      cL.style.cursor = o ? 'pointer' : TOOL_CURSOR.erase;
+    } else {
+      const sel = findObj(state.sel), handle = sel && sel.isGrid && gridHandleAt(X, Y);
+      cL.style.cursor = handle ? HANDLE_CURSOR[handle] : sel && nearObject(sel, X, Y) ? 'move' : hitProbe(X, Y) ? 'grab' : TOOL_CURSOR[state.tool];
+    }
+    return;
+  }
+  const v = state.viewL;
+  switch (drag.kind) {
+    case 'pan': v.cx = drag.cx - (X - drag.X) / v.s; v.cy = drag.cy + (Y - drag.Y) / v.s; break;
+    case 'erase': eraseAt(X, Y); break;
+    case 'stretch':
+      if (!drag.pushed) { pushUndo(); drag.pushed = true; }
+      drag.target = stretchGrid(drag.orig, drag.k, w);
+      if (!movePending) { movePending = true; requestAnimationFrame(applyMove); }
+      return;
+    case 'move':
+      if (!drag.pushed) { pushUndo(); drag.pushed = true; }
+      drag.dx = w[0] - drag.w0[0]; drag.dy = w[1] - drag.w0[1];
+      if (!movePending) { movePending = true; requestAnimationFrame(applyMove); }
+      return;
+    case 'probe': {
+      const pr = drag.probe;
+      if (!drag.pushed) { pushUndo(); drag.pushed = true; }
+      if (drag.part === 'base') pr.p = w; else pr[drag.part] = [w[0] - pr.p[0], w[1] - pr.p[1]];
+      fillFData(pr, [pr.a, pr.b]); break;
+    }
+    case 'free': { const last = drag.pts[drag.pts.length - 1]; if (Math.hypot(w[0] - last[0], w[1] - last[1]) * v.s > 1.5) drag.pts.push(w); break; }
+    case 'line': {
+      let b = w;
+      if (e.shiftKey) {
+        const dx = w[0] - drag.a[0], dy = w[1] - drag.a[1], r = Math.hypot(dx, dy), step = Math.PI / 12;
+        const ang = Math.round(Math.atan2(dy, dx) / step) * step; b = [drag.a[0] + r * Math.cos(ang), drag.a[1] + r * Math.sin(ang)];
+      }
+      drag.b = b; break;
+    }
+    case 'circle': drag.r = Math.hypot(w[0] - drag.c[0], w[1] - drag.c[1]); break;
+    case 'region': drag.b = w; break;
+  }
+  requestDraw();
+});
+function endDrag() {
+  if (!drag) return;
+  if ((drag.kind === 'move' || drag.kind === 'stretch') && drag.pushed) applyMove();
+  const d = drag, s = state.viewL.s;
+  drag = null;
+  if (d.kind === 'free') finishFree(d.pts);
+  else if (d.kind === 'line' && Math.hypot(d.b[0] - d.a[0], d.b[1] - d.a[1]) * s > 6) addCurve({ kind: 'line', a: d.a, b: d.b });
+  else if (d.kind === 'circle' && d.r * s > 5) addCurve({ kind: 'circle', c: d.c, r: d.r });
+  else if (d.kind === 'region') {
+    const x0 = Math.min(d.a[0], d.b[0]), x1 = Math.max(d.a[0], d.b[0]), y0 = Math.min(d.a[1], d.b[1]), y1 = Math.max(d.a[1], d.b[1]);
+    if ((x1 - x0) * s > 10 && (y1 - y0) * s > 10) { pushUndo(); setGrid({ x0, x1, y0, y1 }, false); }
+  } else if (d.kind === 'probe') computeImgBox();
+  cL.style.cursor = TOOL_CURSOR[state.tool];
+  requestDraw();
+}
+cL.addEventListener('pointerup', endDrag);
+cL.addEventListener('pointercancel', endDrag);
+cL.addEventListener('pointerleave', () => { if (state.hover) { state.hover = null; requestDraw(); } });
+
+// dvojklik vybere křivku, vektory nebo grid (pak se dají táhnout), další dvojklik na ně je pustí;
+// dvojklik mimo všechno vrátí pohled roviny
+let lastProbe = null;
+cL.addEventListener('dblclick', e => {
+  const [X, Y] = evPos(e, cL);
+  if (state.tool === 'erase') { if (!hitObject(X, Y)) { fitLeft(); requestDraw(); } return; }
+  // první klik dvojkliku s nástrojem Vektory vložil vektory navíc, ty se vrátí
+  if (state.tool === 'probe' && lastProbe && performance.now() - lastProbe.time < 700 && state.probes.at(-1)?.id === lastProbe.id) undo();
+  lastProbe = null;
+  const o = hitObject(X, Y) || (inGrid(X, Y) || (state.sel === 'grid' && gridHandleAt(X, Y)) ? findObj('grid') : null);
+  if (!o) { fitLeft(); requestDraw(); return; }
+  state.sel = o.id === state.sel ? null : o.id;
+  if (!o.kind && !o.isGrid) state.selected = o.id;
+  cL.style.cursor = state.sel ? 'move' : TOOL_CURSOR[state.tool];
+  requestDraw();
+});
+cR.addEventListener('dblclick', () => { state.autoCam = true; $('#autoCam').checked = true; requestDraw(); });
+
+function resample(pts, step) {
+  const out = [pts[0].slice()];
+  let need = step;
+  for (let i = 1; i < pts.length; i++) {
+    let a = pts[i - 1], b = pts[i], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    while (seg >= need) {
+      const r = need / seg, q = [a[0] + (b[0] - a[0]) * r, a[1] + (b[1] - a[1]) * r];
+      out.push(q); a = q; seg = Math.hypot(b[0] - a[0], b[1] - a[1]); need = step;
+    }
+    need -= seg;
+  }
+  const last = pts[pts.length - 1], end = out[out.length - 1];
+  if (Math.hypot(last[0] - end[0], last[1] - end[1]) > step * 0.3) out.push(last.slice());
+  return out;
+}
+function finishFree(raw) {
+  if (raw.length < 2) return;
+  let pts = resample(raw, 2.5 / state.viewL.s);
+  if (pts.length < 4) return;
+  for (let pass = 0; pass < 3; pass++) {
+    const q = pts.map(p => p.slice());
+    for (let i = 1; i < pts.length - 1; i++) {
+      q[i][0] = (pts[i - 1][0] + 2 * pts[i][0] + pts[i + 1][0]) / 4;
+      q[i][1] = (pts[i - 1][1] + 2 * pts[i][1] + pts[i + 1][1]) / 4;
+    }
+    pts = q;
+  }
+  addCurve({ kind: 'free', pts });
+}
+
+function wheelZoom(e, cv, sz, getView) {
+  e.preventDefault();
+  const v = getView(), [X, Y] = evPos(e, cv), w = toWorld(v, sz, X, Y);
+  v.s *= Math.exp(-e.deltaY * 0.0015);
+  v.cx = w[0] - (X - sz.w / 2) / v.s; v.cy = w[1] + (Y - sz.h / 2) / v.s;
+  requestDraw();
+}
+cL.addEventListener('wheel', e => wheelZoom(e, cL, sizeL, () => state.viewL), { passive: false });
+cR.addEventListener('wheel', e => wheelZoom(e, cR, sizeR, () => { freezeRight(); return state.viewR; }), { passive: false });
+for (const cv of [cL, cR]) cv.addEventListener('contextmenu', e => e.preventDefault());
+
+let dragR = null;
+cR.addEventListener('pointerdown', e => {
+  freezeRight(); cR.setPointerCapture(e.pointerId);
+  const [X, Y] = evPos(e, cR); dragR = { X, Y, cx: state.viewR.cx, cy: state.viewR.cy }; cR.style.cursor = 'grabbing';
+});
+cR.addEventListener('pointermove', e => {
+  if (!dragR) return;
+  const [X, Y] = evPos(e, cR), v = state.viewR;
+  v.cx = dragR.cx - (X - dragR.X) / v.s; v.cy = dragR.cy + (Y - dragR.Y) / v.s; requestDraw();
+});
+const endR = () => { dragR = null; cR.style.cursor = 'grab'; };
+cR.addEventListener('pointerup', endR); cR.addEventListener('pointercancel', endR);
+cR.style.cursor = 'grab';
+
+// ---------- ovládací prvky ----------
+const CHIPS = [['z²', 'z^2'], ['z³', 'z^3'], ['eᶻ', 'exp(z)'], ['1/z', '1/z'], ['sin z', 'sin(z)'], ['(z−i)/(z+i)', '(z-i)/(z+i)'], ['z + 1/z', 'z+1/z'], ['log z', 'log(z)'], ['√z', 'sqrt(z)']];
+const CHIPS_BAD = [['z̄', 'conj(z)'], ['x + 2iy', 'x + 2i y'], ['z·|z|', 'z*abs(z)']];
+const norm = s => s.replace(/\s+/g, '');
+function buildChips(el, list) {
+  for (const [lab, expr] of list) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = lab; b.dataset.expr = expr;
+    b.addEventListener('click', () => { $('#fn').value = expr; applyFunction(expr); });
+    el.appendChild(b);
+  }
+}
+function markChips() { document.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', norm(b.dataset.expr) === norm(state.fsrc))); }
+buildChips($('#chips'), CHIPS); buildChips($('#chipsBad'), CHIPS_BAD);
+EXTENSIONS.forEach((ex, i) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'ext-item';
+  b.innerHTML = `<span class="m">${ex.label}</span><span class="d">${ex.dom}</span>`;
+  b.addEventListener('click', () => loadExtension(i));
+  $('#extList').appendChild(b);
+});
+$('#extBtn').addEventListener('click', extend);
+
+const sceneSel = $('#scene');
+sceneSel.innerHTML = '<option value="">Vyber ukázku…</option>' + SCENES.map((s, i) => `<option value="${i}">${s.name}</option>`).join('');
+sceneSel.addEventListener('change', () => { if (sceneSel.value !== '') loadScene(SCENES[+sceneSel.value]); sceneSel.value = ''; });
+
+let fnTimer = 0;
+$('#fn').addEventListener('input', e => { clearTimeout(fnTimer); fnTimer = setTimeout(() => applyFunction(e.target.value), 450); });
+$('#fn').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  clearTimeout(fnTimer);
+  if (norm(e.target.value) !== norm(state.fsrc) ? applyFunction(e.target.value) : true) { pause(); setT(0); togglePlay(); }
+});
+
+$('#play').addEventListener('click', togglePlay);
+$('#rewind').addEventListener('click', () => { pause(); setT(0); });
+$('#tSlider').addEventListener('input', e => { const v = +e.target.value; pause(); setT(v); });
+document.querySelectorAll('#speed button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', x === b));
+  state.dur = +b.dataset.d;
+}));
+$('#autoCam').addEventListener('change', e => { if (e.target.checked) state.autoCam = true; else freezeRight(); requestDraw(); });
+
+const HINTS = {
+  free: 'Táhni myší a kresli. Kde se křivky protnou, ukáže se úhel.',
+  line: 'Táhni od začátku ke konci. Shift přichytí úhel po 15°.',
+  circle: 'Táhni ze středu ven.',
+  probe: 'Klikni a vlož dvojici vektorů. Táhni bodem nebo hroty a sleduj pravou rovinu.',
+  erase: 'Klikni na křivku nebo vektory a zmizí. Tažením smažeš víc věcí naráz, Ctrl+Z je vrátí.',
+  region: 'Táhni obdélník, na kterém bude grid. U polárního gridu určí střed a poloměr.',
+  pan: 'Táhni a posouvej rovinu z. Kolečko přibližuje.',
+};
+function setTool(t) {
+  state.tool = t; state.hover = null; requestDraw();
+  document.querySelectorAll('#tools .tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  $('#toolHint').textContent = HINTS[t]; cL.style.cursor = TOOL_CURSOR[t];
+}
+document.querySelectorAll('#tools .tool').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+$('#undo').addEventListener('click', undo);
+$('#clearCurves').addEventListener('click', () => { if (state.curves.length) { pushUndo(); state.curves = []; objectsChanged(); } });
+$('#clearProbes').addEventListener('click', () => { if (state.probes.length) { pushUndo(); state.probes = []; objectsChanged(); } });
+$('#resetAll').addEventListener('click', resetAll);
+$('#showAngles').addEventListener('change', e => { state.showAngles = e.target.checked; requestDraw(); });
+
+document.querySelectorAll('#gridType button').forEach(b => b.addEventListener('click', () => setGrid({ type: b.dataset.g }, false)));
+// hustota se mění živě, přepočet nejvýš jednou za snímek
+let densityPending = false;
+$('#density').addEventListener('input', e => {
+  state.grid.n = +e.target.value; $('#densOut').textContent = e.target.value;
+  if (!densityPending) { densityPending = true; requestAnimationFrame(() => { densityPending = false; recomputeAll(); }); }
+});
+$('#checker').addEventListener('change', e => { state.grid.checker = e.target.checked; requestDraw(); });
+for (const id of ['gx0', 'gx1', 'gy0', 'gy1', 'gr0']) $('#' + id).addEventListener('change', () => {
+  const num = id2 => parseFloat($('#' + id2).value.replace(',', '.').replace('−', '-'));
+  const g = { x0: num('gx0'), x1: num('gx1'), y0: num('gy0'), y1: num('gy1'), r0: num('gr0') || 0 };
+  if ([g.x0, g.x1, g.y0, g.y1].every(isFinite) && g.x1 > g.x0 && g.y1 > g.y0) setGrid(g, false); else syncGridUI();
+});
+$('#fitBtn').addEventListener('click', () => { fitLeft(); state.autoCam = true; $('#autoCam').checked = true; requestDraw(); });
+
+$('#themeBtn').addEventListener('click', () => {
+  const root = document.documentElement, cur = root.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  root.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+});
+new MutationObserver(() => { readPalette(); requestDraw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readPalette(); requestDraw(); });
+
+// tlačítka a posuvníky po kliknutí myší pustí fokus, aby mezerník vždy přehrával
+document.addEventListener('pointerup', () => {
+  const a = document.activeElement;
+  if (a && (a.tagName === 'BUTTON' || (a.tagName === 'INPUT' && (a.type === 'range' || a.type === 'checkbox')))) a.blur();
+});
+window.addEventListener('keydown', e => {
+  const a = e.target, tag = a.tagName;
+  if ((tag === 'INPUT' && a.type !== 'range' && a.type !== 'checkbox') || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if (e.code === 'Space') { if (tag === 'BUTTON' || tag === 'INPUT') return; e.preventDefault(); togglePlay(); }
+  else if (e.key === 'r' || e.key === 'R') { if (e.ctrlKey || e.metaKey) return; pause(); setT(0); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
+  else if (e.key === 'Escape') { state.sel = null; requestDraw(); }
+  else if (e.key === 'ArrowRight' && tag !== 'INPUT') { pause(); setT(state.t + 0.05); }
+  else if (e.key === 'ArrowLeft' && tag !== 'INPUT') { pause(); setT(state.t - 0.05); }
+});
+
+// ---------- start ----------
+function resizeAll() {
+  dpr = window.devicePixelRatio || 1;
+  resizeCanvas(cL, sizeL, 'L'); resizeCanvas(cR, sizeR, 'R'); requestDraw();
+}
+new ResizeObserver(resizeAll).observe(cL.parentElement);
+new ResizeObserver(resizeAll).observe(cR.parentElement);
+
+readPalette();
+setTool('free');
+// odkaz zpět na rozcestník jen na webu knihovny (matika.vojtakloud.com/konformni-zobrazeni/)
+if (/^https?:$/.test(location.protocol) && /\/konformni-zobrazeni\/(index\.html)?$/.test(location.pathname)) $('#backLink').hidden = false;
+sizeL.w = sizeL.h = sizeR.w = sizeR.h = 0;
+resizeAll();
+
+loadScene(SCENES[SCENES.length - 1]);   // výchozí stav: prázdný grid
+syncTransport();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(requestDraw);
+})();
+</script>
+</html>
