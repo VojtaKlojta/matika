@@ -480,7 +480,7 @@ const state = {
   fsrc: 'z^2',
   grid: { ...DEFAULT_GRID },
   curves: [], probes: [], inters: [], lines: [], lattice: null, history: [],
-  tol: 0.01, imgBox: null, holo: 'good',
+  tol: 0.01, tolBase: 0.01, tolFactor: 1, imgBox: null, holo: 'good',
   t: 0, u: 0, playing: false, dur: 2.6,
   tool: 'free', selected: null, sel: null, hover: null, showAngles: true, extIdx: null, ext: null,
   viewL: { cx: 0, cy: 0, s: 100 }, viewR: { cx: 0, cy: 0, s: 100 }, autoCam: true,
@@ -595,7 +595,8 @@ function computeTol() {
   for (let i = 0; i < L.fx.length; i += st) finitePush(xs, ys, L.fx[i], L.fy[i]);
   const b = quantBox(xs, ys, 0.02);
   const E = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) : edom();
-  state.tol = Math.max(E, 1e-9) / 350;
+  state.tolBase = Math.max(E, 1e-9) / 350;
+  state.tol = state.tolBase * state.tolFactor;
   // buňky šachovnice, přes které vede řez, se v obrazu nekreslí
   const { nu, nv, NV, fx, fy } = L, lim2 = (40 * state.tol) ** 2, bad = new Uint8Array(nu * nv);
   const far = (a, b) => (fx[b] - fx[a]) ** 2 + (fy[b] - fy[a]) ** 2 > lim2;
@@ -609,16 +610,31 @@ function computeTol() {
   L.bad = bad;
 }
 
-// vzorkuje cestu P(s), s ∈ [0, 1], a zjemňuje tam, kde se obraz rychle mění
+// vzorkuje cestu P(s), s ∈ [0, 1], a zjemňuje tam, kde se obraz rychle mění nebo zatáčí;
+// obraz leží na lomené čáře s odchylkou pod čtvrt pixelu, takže se obrazy, které se mají krýt, opravdu kryjí
 function samplePath(P, N0) {
-  const zs = [], fs = [], tol2 = state.tol * state.tol;
+  const zs = [], fs = [], tol2 = state.tol * state.tol, dev2 = (state.tol / 12) ** 2;
   const p0 = P(0); let f0 = F(p0[0], p0[1]);
   zs.push(p0[0], p0[1]); fs.push(f0[0], f0[1]);
   function rec(sa, fa, sb, fb, d) {
     const fin = isFinite(fa[0]) && isFinite(fa[1]) && isFinite(fb[0]) && isFinite(fb[1]);
     let jump = false;
-    if (fin) { const dx = fb[0] - fa[0], dy = fb[1] - fa[1], d2 = dx * dx + dy * dy; if (d2 <= tol2) return; jump = d2 > 256 * tol2; }
-    if (d >= 8 || zs.length > 24000) {
+    if (fin) {
+      const dx = fb[0] - fa[0], dy = fb[1] - fa[1], d2 = dx * dx + dy * dy;
+      if (d2 <= tol2) {
+        // krátký úsek ještě zjemnit, když jeho střed neleží na tětivě
+        if (d >= 10 || zs.length > 40000) return;
+        const sm = (sa + sb) / 2, pm = P(sm), fm = F(pm[0], pm[1]);
+        const ex = fm[0] - (fa[0] + fb[0]) / 2, ey = fm[1] - (fa[1] + fb[1]) / 2;
+        if (!(ex * ex + ey * ey > dev2)) return;
+        rec(sa, fa, sm, fm, d + 1);
+        zs.push(pm[0], pm[1]); fs.push(fm[0], fm[1]);
+        rec(sm, fm, sb, fb, d + 1);
+        return;
+      }
+      jump = d2 > 256 * tol2;
+    }
+    if (d >= 10 || zs.length > 40000) {
       // ani po zjemnění se skok nezmenšil: řez (log, odmocnina), obraz se tu přeruší, vzor v rovině z ne
       if (jump) { const pm = P((sa + sb) / 2); zs.push(pm[0], pm[1]); fs.push(NaN, NaN); }
       return;
@@ -763,17 +779,23 @@ function checkHolo() {
     : 'Holomorfní jen na části oblasti.';
 }
 
-function computeImgBox() {
+// obdélník, kam padne obraz gridu, křivek a vektorů; fn = jiná funkce než aktuální (pro kameru při rozšíření)
+function imageBox(fn) {
   const xs = [], ys = [], L = state.lattice;
+  const at = (z, f, k) => { if (fn) { const w = fn([z[k], z[k + 1]]); finitePush(xs, ys, w[0], w[1]); } else finitePush(xs, ys, f[k], f[k + 1]); };
   const useLattice = state.grid.type !== 'none' || (!state.curves.length && !state.probes.length);
-  if (useLattice) { const st = Math.max(1, Math.floor(L.fx.length / 12000)); for (let i = 0; i < L.fx.length; i += st) finitePush(xs, ys, L.fx[i], L.fy[i]); }
-  for (const c of state.curves) { const st = 2 * Math.max(1, Math.floor(c.f.length / 4000)); for (let k = 0; k < c.f.length; k += st) finitePush(xs, ys, c.f[k], c.f[k + 1]); }
-  for (const pr of state.probes) finitePush(xs, ys, pr.fp[0], pr.fp[1]);
+  if (useLattice) {
+    const st = Math.max(1, Math.floor(L.fx.length / 12000));
+    for (let i = 0; i < L.fx.length; i += st) { if (fn) { const w = fn([L.zx[i], L.zy[i]]); finitePush(xs, ys, w[0], w[1]); } else finitePush(xs, ys, L.fx[i], L.fy[i]); }
+  }
+  for (const c of state.curves) { const st = 2 * Math.max(1, Math.floor(c.f.length / 4000)); for (let k = 0; k < c.f.length; k += st) at(c.z, c.f, k); }
+  for (const pr of state.probes) { const w = fn ? fn(pr.p) : pr.fp; finitePush(xs, ys, w[0], w[1]); }
   const g = state.grid, full = quantBox(xs, ys, 0), robust = quantBox(xs, ys, xs.length > 60 ? 0.015 : 0);
   // celý obraz, když je omezený; oříznutý jen když ho póly roztáhnou do nekonečna
   const ok = full && robust && full.x1 - full.x0 <= 2.5 * (robust.x1 - robust.x0) + 1e-9 && full.y1 - full.y0 <= 2.5 * (robust.y1 - robust.y0) + 1e-9;
-  state.imgBox = (ok ? full : robust) || { x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1 };
+  return (ok ? full : robust) || { x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1 };
 }
+function computeImgBox() { state.imgBox = imageBox(null); }
 
 function recomputeAll() {
   finishExtension();
@@ -810,8 +832,25 @@ function rightView() {
   if (!state.autoCam) return state.viewR;
   const a = leftAsRight();
   let b = state.imgBox ? fitView(state.imgBox, sizeR.w, sizeR.h) : a;
-  if (state.ext && state.ext.oldBox) b = blendView(fitView(state.ext.oldBox, sizeR.w, sizeR.h), b, state.ext.e);
+  const x = state.ext;
+  if (x && x.fromBox && x.toBox) b = blendView(fitView(x.fromBox, sizeR.w, sizeR.h), fitView(x.toBox, sizeR.w, sizeR.h), x.p);
   return blendView(a, b, state.t);
+}
+// Po přiblížení pravé roviny se obrazy přepočítají jemněji (až 8×), aby i zblízka zůstaly hladké a kryly se.
+// Počítá se až chvíli po posledním pohybu kolečkem nebo myší.
+let refineTimer = 0;
+function refineForView() {
+  clearTimeout(refineTimer);
+  refineTimer = setTimeout(() => {
+    if (state.ext || !state.imgBox) return;
+    const sFit = fitView(state.imgBox, sizeR.w, sizeR.h).s;
+    const want = state.autoCam ? 1 : Math.min(1, Math.max(1 / 8, sFit / state.viewR.s));
+    if (Math.abs(Math.log(want / state.tolFactor)) < Math.log(1.5)) return;
+    state.tolFactor = want; state.tol = state.tolBase * want;
+    computeLines();
+    for (const c of state.curves) computeCurve(c);
+    requestDraw();
+  }, 300);
 }
 function freezeRight() {
   if (state.autoCam) { state.viewR = rightView(); state.autoCam = false; $('#autoCam').checked = false; }
@@ -876,20 +915,17 @@ function drawAxes(ctx, sz, v, plane) {
   ctx.textAlign = labRight ? 'right' : 'left'; ctx.textBaseline = 'top'; ctx.fillText('Im ' + plane, labRight ? tx - 10 : tx + 10, 10);
 }
 
-// projde body (z, f) pro dané t a přeruší čáru u nekonečna a velkých skoků (póly, řezy);
-// během rozšíření (f0, e) jde obraz z původních hodnot f0 do nových f; d0 říká, kde byla původní funkce
-// definovaná, a na hranici se čára přeruší, aby se body jedoucí odjinud nespojovaly
-function tracePath(ctx, z, f, t, ox, oy, s, brk2, f0, e, d0) {
+// projde body (z, f) pro dané t a přeruší čáru u nekonečna a velkých skoků (póly, řezy).
+// domain: v rovině z jen tam, kde je f definovaná; gr, e: během rozšíření jen body, ke kterým grid už dorostl
+function tracePath(ctx, z, f, t, ox, oy, s, brk2, domain, gr, e) {
   let pen = false, px = 0, py = 0;
   for (let k = 0; k < z.length; k += 2) {
-    if (d0 && k > 0 && d0[k >> 1] !== d0[(k >> 1) - 1]) pen = false;
+    if (gr && gr[k >> 1] > e) { pen = false; continue; }
     let x, y;
-    if (t === 0) { x = z[k]; y = z[k + 1]; }
-    else {
-      let fx = f[k], fy = f[k + 1];
-      if (f0) { fx = f0[k] + (fx - f0[k]) * e; fy = f0[k + 1] + (fy - f0[k + 1]) * e; }
-      x = z[k] + (fx - z[k]) * t; y = z[k + 1] + (fy - z[k + 1]) * t;
-    }
+    if (t === 0) {
+      if (domain && !(isFinite(f[k]) && isFinite(f[k + 1]))) { pen = false; continue; }
+      x = z[k]; y = z[k + 1];
+    } else { x = z[k] + (f[k] - z[k]) * t; y = z[k + 1] + (f[k + 1] - z[k + 1]) * t; }
     const X = ox + x * s, Y = oy - y * s;
     if (!(X > -1e5 && X < 1e5 && Y > -1e5 && Y < 1e5)) { pen = false; continue; }
     if (pen) { const dx = X - px, dy = Y - py; if (dx * dx + dy * dy > brk2) ctx.moveTo(X, Y); else ctx.lineTo(X, Y); }
@@ -901,20 +937,19 @@ function tracePath(ctx, z, f, t, ox, oy, s, brk2, f0, e, d0) {
 const cellIdx = new Int32Array(4 * K);
 function drawChecker(ctx, t, ox, oy, s, brk2, ext) {
   const L = state.lattice, { NU, NV, nu, nv, zx, zy, fx, fy, sx, sy, ok } = L;
-  const f0x = ext && L.f0x, f0y = ext && L.f0y, e = ext ? ext.e : 1;
+  const cellG = ext && L.cellG, e = ext ? ext.e : 1;
   for (let i = 0; i < zx.length; i++) {
     let x, y;
-    if (t === 0) { x = zx[i]; y = zy[i]; }
-    else {
-      const ux = f0x ? f0x[i] + (fx[i] - f0x[i]) * e : fx[i], uy = f0y ? f0y[i] + (fy[i] - f0y[i]) * e : fy[i];
-      x = zx[i] + (ux - zx[i]) * t; y = zy[i] + (uy - zy[i]) * t;
-    }
+    if (t === 0) {
+      if (!(isFinite(fx[i]) && isFinite(fy[i]))) { ok[i] = 0; continue; }   // v rovině z jen tam, kde je f definovaná
+      x = zx[i]; y = zy[i];
+    } else { x = zx[i] + (fx[i] - zx[i]) * t; y = zy[i] + (fy[i] - zy[i]) * t; }
     const X = ox + x * s, Y = oy - y * s;
     if (X > -1e5 && X < 1e5 && Y > -1e5 && Y < 1e5) { sx[i] = X; sy[i] = Y; ok[i] = 1; } else ok[i] = 0;
   }
   ctx.beginPath();
   for (let ci = 0; ci < nu; ci++) for (let cj = 0; cj < nv; cj++) {
-    if ((ci + cj) & 1 || (t > 0 && L.bad[ci * nv + cj]) || (f0x && L.mixed[ci * nv + cj])) continue;
+    if ((ci + cj) & 1 || (t > 0 && L.bad[ci * nv + cj]) || (cellG && cellG[ci * nv + cj] > e)) continue;
     const i0 = ci * K, j0 = cj * K;
     let n = 0;
     for (let k = 0; k < K; k++) cellIdx[n++] = (i0 + k) * NV + j0;
@@ -966,7 +1001,8 @@ function drawPanel(ctx, sz, v, t, side) {
   ctx.fillStyle = pal.panel; ctx.fillRect(0, 0, W, H);
   drawAxes(ctx, sz, v, side === 'L' ? 'z' : 'w');
   ctx.lineJoin = 'round'; ctx.lineCap = 'butt';
-  const ext = side === 'R' ? state.ext : null, e = ext ? ext.e : 1;
+  // rozšíření: grid roste v obou rovinách zároveň, křivky v rovině z zůstávají celé
+  const ext = state.ext, e = ext ? ext.e : 1;
 
   if (state.grid.type !== 'none') {
     if (state.grid.checker) drawChecker(ctx, t, ox, oy, s, brk2, ext);
@@ -975,7 +1011,7 @@ function drawPanel(ctx, sz, v, t, side) {
     for (const fam of [0, 1]) for (const w of [0, 1, 2]) {
       ctx.beginPath();
       let any = false;
-      for (const L of state.lines) if (L.fam === fam && L.w === w) { tracePath(ctx, L.z, L.f, t, ox, oy, s, brk2, ext && L.f0, e, ext && L.d0); any = true; }
+      for (const L of state.lines) if (L.fam === fam && L.w === w) { tracePath(ctx, L.z, L.f, t, ox, oy, s, brk2, true, ext && L.gr, e); any = true; }
       if (!any) continue;
       ctx.strokeStyle = fam ? pal['v-line'] : pal['u-line']; ctx.lineWidth = widths[w]; ctx.stroke();
     }
@@ -984,7 +1020,7 @@ function drawPanel(ctx, sz, v, t, side) {
   }
 
   for (const c of state.curves) {
-    ctx.beginPath(); tracePath(ctx, c.z, c.f, t, ox, oy, s, brk2, ext && c.f0, e, ext && c.d0);
+    ctx.beginPath(); tracePath(ctx, c.z, c.f, t, ox, oy, s, brk2, false, side === 'R' && ext && c.gr, e);
     ctx.lineCap = 'round';
     if (c === state.hover || c.id === state.sel) {
       ctx.globalAlpha = c === state.hover ? 0.35 : 0.2; ctx.strokeStyle = c === state.hover ? pal.bad : pal.ink;
@@ -994,7 +1030,7 @@ function drawPanel(ctx, sz, v, t, side) {
   }
 
   // během rozšíření se úhly a vektory v obrazu schovají, ukážou se až na konci
-  if (state.showAngles && !ext) for (const it of state.inters) {
+  if (state.showAngles && !(ext && side === 'R')) for (const it of state.inters) {
     let P, a, b;
     if (side === 'L') { P = it.p; a = it.dA; b = it.dB; }
     else { P = [it.p[0] + (it.fp[0] - it.p[0]) * t, it.p[1] + (it.fp[1] - it.p[1]) * t]; a = pushVec(it, 0, it.dA, t); b = pushVec(it, 1, it.dB, t); }
@@ -1007,7 +1043,7 @@ function drawPanel(ctx, sz, v, t, side) {
     angleMark(ctx, X, Y, ta, d, 20, fmtDeg(shown * 180 / Math.PI), pal.ink);
   }
 
-  if (!ext) for (const pr of state.probes) drawProbe(ctx, sz, pr, t, side, ox, oy, s);
+  if (!(ext && side === 'R')) for (const pr of state.probes) drawProbe(ctx, sz, pr, t, side, ox, oy, s);
   if (side === 'L' && drag) drawPreview(ctx, ox, oy, s);
 }
 
@@ -1114,12 +1150,19 @@ function frame() {
   if (state.ext) {
     const now = performance.now(), dt = Math.min(0.05, (now - lastTs) / 1000);
     lastTs = now;
-    state.ext.u = Math.min(1, state.ext.u + dt / state.dur);
-    state.ext.e = ease(state.ext.u);
+    const x = state.ext;
+    x.u = Math.min(1, x.u + dt / state.dur);
+    x.p = ease(x.u);
+    x.e = x.dir > 0 ? x.p : 1 - x.p;
   }
   drawPanel(ctxL, sizeL, state.viewL, 0, 'L');
   drawPanel(ctxR, sizeR, rightView(), state.t, 'R');
-  if (state.ext && state.ext.u >= 1) { finishExtension(); requestDraw(); }
+  if (state.ext && state.ext.u >= 1) {
+    const then = state.ext.thenSrc;
+    finishExtension();
+    if (then) { $('#fn').value = then; applyFunction(then, false, true); }
+    requestDraw();
+  }
   updateInfo();
   if (state.playing || state.ext) requestDraw();
 }
@@ -1360,44 +1403,71 @@ function syncExtUI() {
 function finishExtension() {
   if (!state.ext) return;
   state.ext = null;
-  for (const L of state.lines) L.f0 = L.d0 = null;
-  for (const c of state.curves) c.f0 = c.d0 = null;
-  if (state.lattice) state.lattice.f0x = state.lattice.f0y = state.lattice.mixed = null;
+  for (const L of state.lines) L.gr = null;
+  for (const c of state.curves) c.gr = null;
+  if (state.lattice) state.lattice.gr = state.lattice.cellG = null;
 }
-// Rozšířit: hotová část obrazu stojí, zbytek doteče ze svého místa v rovině z; druhý stisk vrátí původní funkci
+
+// Jak daleko je bod od oblasti, kde je funkce dom definovaná: 0 uvnitř, 1 nejdál v gridu.
+// Rastr přes oblast gridu a vzdálenostní transformace ve dvou průchodech (vodorovně, svisle, šikmo).
+function growthField(dom) {
+  const g = state.grid, RW = 240, RH = Math.max(40, Math.min(480, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
+  const cw = (g.x1 - g.x0) / RW, ch = (g.y1 - g.y0) / RH, cd = Math.hypot(cw, ch), INF = 1e30, D = new Float64Array(RW * RH);
+  for (let j = 0; j < RH; j++) for (let i = 0; i < RW; i++) {
+    const w = dom([g.x0 + (i + 0.5) * cw, g.y0 + (j + 0.5) * ch]);
+    D[j * RW + i] = isFinite(w[0]) && isFinite(w[1]) ? 0 : INF;
+  }
+  const relax = (k, j2, i2, add) => { if (i2 >= 0 && i2 < RW && j2 >= 0 && j2 < RH) { const v = D[j2 * RW + i2] + add; if (v < D[k]) D[k] = v; } };
+  for (let j = 0; j < RH; j++) for (let i = 0; i < RW; i++) {
+    const k = j * RW + i;
+    relax(k, j, i - 1, cw); relax(k, j - 1, i, ch); relax(k, j - 1, i - 1, cd); relax(k, j - 1, i + 1, cd);
+  }
+  for (let j = RH - 1; j >= 0; j--) for (let i = RW - 1; i >= 0; i--) {
+    const k = j * RW + i;
+    relax(k, j, i + 1, cw); relax(k, j + 1, i, ch); relax(k, j + 1, i + 1, cd); relax(k, j + 1, i - 1, cd);
+  }
+  let max = 0;
+  for (let k = 0; k < D.length; k++) if (D[k] < INF / 2 && D[k] > max) max = D[k];
+  return (x, y) => {
+    const i = Math.min(RW - 1, Math.max(0, Math.floor((x - g.x0) / cw))), j = Math.min(RH - 1, Math.max(0, Math.floor((y - g.y0) / ch)));
+    const v = D[j * RW + i];
+    return v >= INF / 2 || !(max > 0) ? 1 : v / max;
+  };
+}
+
+// Rozšíření jako růst: v rovině w je rovnou výsledek rozšířené funkce a grid v obou rovinách roste z oblasti, kde
+// původní funkce konverguje, do celé oblasti (dir = +1); zpět se stejně stáhne a pak se vrátí původní funkce (dir = −1)
+function startGrowth(dom, dir, fromBox, toBox, thenSrc) {
+  const gf = growthField(dom);
+  const val = (x, y) => { const w = dom([x, y]); return isFinite(w[0]) && isFinite(w[1]) ? 0 : Math.max(gf(x, y), 1e-4); };
+  const fill = z => { const a = new Float32Array(z.length / 2); for (let k = 0; k < z.length; k += 2) a[k >> 1] = val(z[k], z[k + 1]); return a; };
+  for (const L of state.lines) L.gr = fill(L.z);
+  for (const c of state.curves) c.gr = fill(c.z);
+  const Lt = state.lattice, n = Lt.zx.length;
+  Lt.gr = new Float32Array(n);
+  for (let i = 0; i < n; i++) Lt.gr[i] = val(Lt.zx[i], Lt.zy[i]);
+  // buňka šachovnice se ukáže, až grid doroste ke všem jejím bodům
+  Lt.cellG = new Float32Array(Lt.nu * Lt.nv);
+  for (let ci = 0; ci < Lt.nu; ci++) for (let cj = 0; cj < Lt.nv; cj++) {
+    let m = 0;
+    for (let a = 0; a <= K; a++) for (let b = 0; b <= K; b++) m = Math.max(m, Lt.gr[(ci * K + a) * Lt.NV + cj * K + b]);
+    Lt.cellG[ci * Lt.nv + cj] = m;
+  }
+  state.ext = { u: 0, p: 0, e: dir > 0 ? 0 : 1, dir, fromBox, toBox, thenSrc };
+  lastTs = performance.now(); requestDraw();
+}
 function extend() {
   const ex = EXTENSIONS[state.extIdx];
   if (!ex) return;
-  if (norm(state.fsrc) === norm(ex.ext)) { $('#fn').value = ex.f; applyFunction(ex.f, false, true); return; }
-  const oldFN = FN, oldBox = state.imgBox && { ...state.imgBox }, t0 = state.t;
-  pause();
-  $('#fn').value = ex.ext;
-  applyFunction(ex.ext, false, true);
-  if (t0 === 0) { togglePlay(); return; }
-  const defined = w => isFinite(w[0]) && isFinite(w[1]);
-  const from = o => {
-    const z = o.z, f0 = new Float64Array(z.length), d0 = new Uint8Array(z.length / 2);
-    for (let k = 0; k < z.length; k += 2) {
-      const w = oldFN([z[k], z[k + 1]]), ok = defined(w);
-      f0[k] = ok ? w[0] : z[k]; f0[k + 1] = ok ? w[1] : z[k + 1]; d0[k >> 1] = ok;
-    }
-    o.f0 = f0; o.d0 = d0;
-  };
-  state.lines.forEach(from); state.curves.forEach(from);
-  const Lt = state.lattice, n = Lt.zx.length, d = new Uint8Array(n);
-  Lt.f0x = new Float64Array(n); Lt.f0y = new Float64Array(n); Lt.mixed = new Uint8Array(Lt.nu * Lt.nv);
-  for (let i = 0; i < n; i++) {
-    const w = oldFN([Lt.zx[i], Lt.zy[i]]), ok = defined(w);
-    Lt.f0x[i] = ok ? w[0] : Lt.zx[i]; Lt.f0y[i] = ok ? w[1] : Lt.zy[i]; d[i] = ok;
+  pause(); finishExtension();
+  const dom = compile(ex.f), fromBox = state.imgBox && { ...state.imgBox };
+  if (norm(state.fsrc) !== norm(ex.ext)) {
+    $('#fn').value = ex.ext;
+    applyFunction(ex.ext, false, true);
+    startGrowth(dom, +1, fromBox, state.imgBox && { ...state.imgBox }, null);
+  } else {
+    startGrowth(dom, -1, fromBox, imageBox(dom), ex.f);
   }
-  // buňky, které leží zčásti v původní oblasti a zčásti mimo ni, se během animace nekreslí
-  for (let ci = 0; ci < Lt.nu; ci++) for (let cj = 0; cj < Lt.nv; cj++) {
-    const first = d[ci * K * Lt.NV + cj * K];
-    for (let a = 0; a <= K && !Lt.mixed[ci * Lt.nv + cj]; a++) for (let b = 0; b <= K; b++)
-      if (d[(ci * K + a) * Lt.NV + cj * K + b] !== first) { Lt.mixed[ci * Lt.nv + cj] = 1; break; }
-  }
-  state.ext = { u: 0, e: 0, oldBox };
-  lastTs = performance.now(); requestDraw();
 }
 
 // ---------- vstup myší na levé rovině ----------
@@ -1577,7 +1647,7 @@ cL.addEventListener('dblclick', e => {
   cL.style.cursor = state.sel ? 'move' : TOOL_CURSOR[state.tool];
   requestDraw();
 });
-cR.addEventListener('dblclick', () => { state.autoCam = true; $('#autoCam').checked = true; requestDraw(); });
+cR.addEventListener('dblclick', () => { state.autoCam = true; $('#autoCam').checked = true; refineForView(); requestDraw(); });
 
 function resample(pts, step) {
   const out = [pts[0].slice()];
@@ -1617,7 +1687,7 @@ function wheelZoom(e, cv, sz, getView) {
   requestDraw();
 }
 cL.addEventListener('wheel', e => wheelZoom(e, cL, sizeL, () => state.viewL), { passive: false });
-cR.addEventListener('wheel', e => wheelZoom(e, cR, sizeR, () => { freezeRight(); return state.viewR; }), { passive: false });
+cR.addEventListener('wheel', e => { wheelZoom(e, cR, sizeR, () => { freezeRight(); return state.viewR; }); refineForView(); }, { passive: false });
 for (const cv of [cL, cR]) cv.addEventListener('contextmenu', e => e.preventDefault());
 
 let dragR = null;
@@ -1676,7 +1746,7 @@ document.querySelectorAll('#speed button').forEach(b => b.addEventListener('clic
   document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', x === b));
   state.dur = +b.dataset.d;
 }));
-$('#autoCam').addEventListener('change', e => { if (e.target.checked) state.autoCam = true; else freezeRight(); requestDraw(); });
+$('#autoCam').addEventListener('change', e => { if (e.target.checked) state.autoCam = true; else freezeRight(); refineForView(); requestDraw(); });
 
 const HINTS = {
   free: 'Táhni myší a kresli. Kde se křivky protnou, ukáže se úhel.',
@@ -1712,7 +1782,7 @@ for (const id of ['gx0', 'gx1', 'gy0', 'gy1', 'gr0']) $('#' + id).addEventListen
   const g = { x0: num('gx0'), x1: num('gx1'), y0: num('gy0'), y1: num('gy1'), r0: num('gr0') || 0 };
   if ([g.x0, g.x1, g.y0, g.y1].every(isFinite) && g.x1 > g.x0 && g.y1 > g.y0) setGrid(g, false); else syncGridUI();
 });
-$('#fitBtn').addEventListener('click', () => { fitLeft(); state.autoCam = true; $('#autoCam').checked = true; requestDraw(); });
+$('#fitBtn').addEventListener('click', () => { fitLeft(); state.autoCam = true; $('#autoCam').checked = true; refineForView(); requestDraw(); });
 
 $('#themeBtn').addEventListener('click', () => {
   const root = document.documentElement, cur = root.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
