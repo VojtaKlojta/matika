@@ -77,6 +77,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--ink); }
   background: var(--surface); color: var(--ink); border: 1px solid var(--ink); border-radius: 8px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; gap: 8px;
 }
+.tour-card > * { transition: opacity 0.16s; }
+.tour-card.swap > * { opacity: 0.25; }
 .tour-count { font: 500 12px var(--font-mono); color: var(--muted); }
 .tour-card h2 { margin: 0; font: 500 19px/1.25 var(--font-math); }
 .tour-card p { margin: 0; font-size: 13.5px; line-height: 1.5; }
@@ -282,7 +284,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
         </div>
       </div>
       <p class="hint" id="toolHint"></p>
-      <p class="hint">Dvojklik na křivku, vektory nebo grid je vybere a pak s nimi jde táhnout, grid i roztahovat za úchyty. Dalším dvojklikem je pustíš, Delete smaže vybranou křivku nebo vektory. Dvojklik mimo všechno vrátí pohled roviny.</p>
+      <p class="hint">Dvojklik na křivku, vektory nebo grid je vybere a pak s nimi jde táhnout, grid i roztahovat za úchyty. Ctrl a klik přidá do výběru další objekt. Výběr zruší klik mimo objekty nebo Esc, Delete vybrané smaže. Dvojklik mimo všechno vrátí pohled roviny.</p>
       <div class="row">
         <button class="btn" id="undo" type="button" title="Ctrl+Z">Zpět</button>
         <button class="btn" id="clearCurves" type="button">Smazat křivky</button>
@@ -313,7 +315,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 
     <section class="keys">
       <span class="eyebrow">Klávesy a myš</span>
-      <div><kbd>Mezerník</kbd> přehrát a pauza · <kbd>R</kbd> zpět na t = 0 · <kbd>←</kbd> <kbd>→</kbd> krok v t · <kbd>Ctrl+Z</kbd> zpět · dvojklik vybere a pustí objekt, mimo objekty vrátí pohled · <kbd>Delete</kbd> smaže vybraný · <kbd>Esc</kbd> zruší výběr · kolečko přibližuje · pravým tlačítkem posun</div>
+      <div><kbd>Mezerník</kbd> přehrát a pauza · <kbd>R</kbd> zpět na t = 0 · <kbd>←</kbd> <kbd>→</kbd> krok v t · <kbd>Ctrl+Z</kbd> zpět · dvojklik vybere a pustí objekt, mimo objekty vrátí pohled · <kbd>Ctrl</kbd> + klik přidá do výběru · klik mimo nebo <kbd>Esc</kbd> zruší výběr · <kbd>Delete</kbd> smaže vybrané · kolečko přibližuje · pravým tlačítkem posun</div>
     </section>
   </aside>
 
@@ -345,6 +347,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   <p id="tourText"></p>
   <p class="tour-task" id="tourTask"></p>
   <div class="tour-actions">
+    <button class="btn" id="tourPrev" type="button">← Předchozí</button>
     <button class="play tour-next" id="tourNext" type="button">Další</button>
     <button class="btn" id="tourSkip" type="button">Přeskočit krok</button>
     <button class="btn tour-end" id="tourEnd" type="button">Ukončit návod</button>
@@ -354,6 +357,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   <div class="tour-modal-card" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
     <h2 id="welcomeTitle"></h2>
     <p id="welcomeText"></p>
+    <label class="check" id="welcomeNeverRow"><input type="checkbox" id="welcomeNever"> Již nezobrazovat</label>
     <div class="tour-actions">
       <button class="play" id="welcomeStart" type="button"></button>
       <button class="btn" id="welcomeSkip" type="button"></button>
@@ -549,14 +553,14 @@ const K = 6;              // jemnost šachovnice na hranu buňky
 const DEFAULT_GRID = { type: 'cart', x0: -2, x1: 2, y0: -2, y1: 2, r0: 0, n: 12, checker: false };
 let FN = compile('z^2');
 const F = (x, y) => FN([x, y]);
-// selected = vektory v panelu s údaji, sel = objekt vybraný dvojklikem, hover = objekt pod gumou
+// selected = vektory v panelu s údaji, sel = id vybraných objektů (dvojklik, Ctrl + klik), hover = objekt pod gumou
 const state = {
   fsrc: 'z^2',
   grid: { ...DEFAULT_GRID },
   curves: [], probes: [], inters: [], lines: [], lattice: null, history: [],
   tol: 0.01, tolBase: 0.01, tolFactor: 1, imgBox: null, holo: 'good',
   t: 0, u: 0, playing: false, dur: 2.6,
-  tool: 'free', selected: null, sel: null, hover: null, showAngles: true, extIdx: null, ext: null,
+  tool: 'free', selected: null, sel: new Set(), hover: null, showAngles: true, extIdx: null, ext: null,
   viewL: { cx: 0, cy: 0, s: 100 }, viewR: { cx: 0, cy: 0, s: 100 }, autoCam: true,
 };
 let nextId = 1, colorCounter = 0;
@@ -1092,14 +1096,14 @@ function drawPanel(ctx, sz, v, t, side) {
       ctx.strokeStyle = fam ? pal['v-line'] : pal['u-line']; ctx.lineWidth = widths[w]; ctx.stroke();
     }
     ctx.globalAlpha = 1;
-    if (side === 'L' && state.sel === 'grid') drawGridSelection(ctx, ox, oy, s);
+    if (side === 'L' && gridSelected()) drawGridSelection(ctx, ox, oy, s);
   }
   drawEdge(ctx, t, ox, oy, s, brk2);
 
   for (const c of state.curves) {
     ctx.beginPath(); tracePath(ctx, c.z, c.f, t, ox, oy, s, brk2, false, side === 'R' && ext && c.gr, e);
     ctx.lineCap = 'round';
-    if (c === state.hover || c.id === state.sel) {
+    if (c === state.hover || state.sel.has(c.id)) {
       ctx.globalAlpha = c === state.hover ? 0.35 : 0.2; ctx.strokeStyle = c === state.hover ? pal.bad : pal.ink;
       ctx.lineWidth = 12; ctx.stroke(); ctx.globalAlpha = 1;
     }
@@ -1168,7 +1172,7 @@ function drawProbe(ctx, sz, pr, t, side, ox, oy, s) {
     }
   }
   if (!isFinite(A[0] + A[1] + B[0] + B[1])) return;
-  if (pr === state.hover || pr.id === state.sel) {
+  if (pr === state.hover || state.sel.has(pr.id)) {
     ctx.globalAlpha = pr === state.hover ? 0.3 : 0.14; ctx.fillStyle = pr === state.hover ? pal.bad : pal.ink;
     ctx.beginPath(); ctx.arc(X, Y, Math.max(Math.hypot(A[0], A[1]), Math.hypot(B[0], B[1])) + 10, 0, 2 * Math.PI); ctx.fill();
     ctx.globalAlpha = 1;
@@ -1313,6 +1317,9 @@ function shiftedCurve(c, dx, dy) {
 const GRID = { id: 'grid', isGrid: true };
 const findObj = id => id == null ? null : id === 'grid' ? (state.grid.type !== 'none' ? GRID : null)
   : state.curves.find(c => c.id === id) || state.probes.find(p => p.id === id) || null;
+const selObjs = () => [...state.sel].map(findObj).filter(Boolean);
+function pruneSel() { for (const id of [...state.sel]) if (!findObj(id)) state.sel.delete(id); }
+const gridSelected = () => state.sel.has('grid') && !!findObj('grid');
 
 // Zpět: před každou změnou objektů se uloží jejich stav
 function pushUndo() {
@@ -1323,12 +1330,12 @@ function undo() {
   const h = state.history.pop();
   if (!h) return;
   state.curves = h.curves; state.probes = h.probes; state.grid = h.grid;
-  if (!findObj(state.sel)) state.sel = null;
+  pruneSel();
   syncGridUI(); recomputeAll();
   tourNote('undo');
 }
 function objectsChanged() {
-  if (!findObj(state.sel)) state.sel = null;
+  pruneSel();
   if (!state.probes.some(p => p.id === state.selected)) state.selected = null;
   computeIntersections(); computeImgBox(); requestDraw();
 }
@@ -1351,11 +1358,12 @@ function removeObject(o) {
   state.curves = state.curves.filter(c => c !== o);
   state.probes = state.probes.filter(p => p !== o);
 }
+// Delete smaže všechny vybrané křivky a vektory (grid ne); bez výběru vektory z panelu s údaji
 function deleteSelected() {
-  if (state.sel === 'grid') return;
-  const o = findObj(state.sel) || findObj(state.selected);
-  if (!o) return;
-  pushUndo(); removeObject(o); objectsChanged();
+  const objs = selObjs().filter(o => !o.isGrid);
+  const list = objs.length ? objs : state.sel.size ? [] : [findObj(state.selected)].filter(Boolean);
+  if (!list.length) return;
+  pushUndo(); list.forEach(removeObject); objectsChanged();
 }
 function resetAll() {
   pushUndo(); pause();
@@ -1436,7 +1444,7 @@ function loadScene(sc) {
   colorCounter = 0;
   state.curves = sc.curves.map(makeCurve);
   state.probes = (sc.probes || []).map(p => p.deg ? makeProbe(p.p, pol(p.len, p.deg[0]), pol(p.len, p.deg[1])) : makeProbe(p.p, p.a, p.b));
-  state.history = []; state.sel = null; state.selected = state.probes[0]?.id ?? null;
+  state.history = []; state.sel = new Set(); state.selected = state.probes[0]?.id ?? null;
   state.extIdx = sc.extIdx ?? null;
   syncGridUI(); markChips();
   fitLeft(); recomputeAll(); syncExtUI();
@@ -1753,18 +1761,30 @@ function applyMove() {
   if (!drag) return;
   if (drag.kind === 'stretch') { if (drag.target) { Object.assign(state.grid, drag.target); syncGridUI(); recomputeAll(); tourNote('gridChange'); } return; }
   if (drag.kind !== 'move') return;
-  const o = findObj(drag.id);
-  if (!o) return;
-  if (o.isGrid) {
-    const g = drag.orig;
-    Object.assign(state.grid, { x0: g.x0 + drag.dx, x1: g.x1 + drag.dx, y0: g.y0 + drag.dy, y1: g.y1 + drag.dy });
-    syncGridUI(); recomputeAll(); tourNote('gridChange'); return;
+  let gridMoved = false, objMoved = false;
+  for (const it of drag.items) {
+    const o = findObj(it.id);
+    if (!o) continue;
+    if (o.isGrid) {
+      const g = it.orig;
+      Object.assign(state.grid, { x0: g.x0 + drag.dx, x1: g.x1 + drag.dx, y0: g.y0 + drag.dy, y1: g.y1 + drag.dy });
+      gridMoved = true;
+    } else {
+      if (o.kind) state.curves[state.curves.indexOf(o)] = shiftedCurve(it.orig, drag.dx, drag.dy);
+      else { o.p = [it.orig.p[0] + drag.dx, it.orig.p[1] + drag.dy]; fillFData(o, [o.a, o.b]); }
+      objMoved = true;
+    }
   }
-  if (o.kind) state.curves[state.curves.indexOf(o)] = shiftedCurve(drag.orig, drag.dx, drag.dy);
-  else { o.p = [drag.orig.p[0] + drag.dx, drag.orig.p[1] + drag.dy]; fillFData(o, [o.a, o.b]); }
-  tourNote('objMove');
-  objectsChanged();
+  if (gridMoved) { syncGridUI(); recomputeAll(); tourNote('gridChange'); } else objectsChanged();
+  if (objMoved) tourNote('objMove');
 }
+// vybraný objekt pod kurzorem (vektory a křivky mají přednost před plochou gridu)
+function selectedAt(X, Y) {
+  const objs = selObjs();
+  return objs.find(o => !o.isGrid && nearObject(o, X, Y)) || objs.find(o => o.isGrid && nearObject(o, X, Y)) || null;
+}
+// objekt pod kurzorem pro výběr: vektory, křivky, jinak plocha gridu
+const pickAt = (X, Y) => hitObject(X, Y) || (inGrid(X, Y) || (gridSelected() && gridHandleAt(X, Y)) ? findObj('grid') : null);
 
 cL.addEventListener('pointerdown', e => {
   const [X, Y] = evPos(e, cL), w = toWorld(state.viewL, sizeL, X, Y);
@@ -1774,12 +1794,28 @@ cL.addEventListener('pointerdown', e => {
   }
   if (e.button !== 0) return;
   if (state.tool === 'erase') { drag = { kind: 'erase', pushed: false }; eraseAt(X, Y); return; }
-  const sel = findObj(state.sel);
-  const handle = sel && sel.isGrid && gridHandleAt(X, Y);
+  // Ctrl + klik přidá objekt do výběru, nebo ho z výběru odebere
+  if (e.ctrlKey || e.metaKey) {
+    const o = pickAt(X, Y);
+    if (o) {
+      if (state.sel.has(o.id)) state.sel.delete(o.id);
+      else { state.sel.add(o.id); if (!o.kind && !o.isGrid) state.selected = o.id; }
+      tourNote('select'); requestDraw();
+    }
+    drag = { kind: 'none' }; return;
+  }
+  const handle = gridSelected() && gridHandleAt(X, Y);
   if (handle) { drag = { kind: 'stretch', k: handle, orig: { ...state.grid }, pushed: false }; return; }
-  if (sel && nearObject(sel, X, Y)) {
-    drag = { kind: 'move', id: sel.id, orig: sel.isGrid ? { ...state.grid } : sel.kind ? sel : { p: [...sel.p] }, w0: w, dx: 0, dy: 0, pushed: false };
+  // tah za kterýkoli vybraný objekt posune celý výběr
+  if (selectedAt(X, Y)) {
+    const items = selObjs().map(o => ({ id: o.id, orig: o.isGrid ? { ...state.grid } : o.kind ? o : { p: [...o.p] } }));
+    drag = { kind: 'move', items, w0: w, dx: 0, dy: 0, pushed: false };
     cL.style.cursor = 'grabbing'; return;
+  }
+  // klik mimo vybrané objekty výběr zruší; s nástrojem Vektory tenhle klik nové vektory nepřidá
+  if (state.sel.size) {
+    state.sel.clear(); requestDraw();
+    if (state.tool === 'probe') { drag = { kind: 'none' }; return; }
   }
   const hit = hitProbe(X, Y);
   if (hit) { state.selected = hit.probe.id; drag = { kind: 'probe', part: hit.part, probe: hit.probe, pushed: false }; cL.style.cursor = 'grabbing'; requestDraw(); return; }
@@ -1805,8 +1841,8 @@ cL.addEventListener('pointermove', e => {
       if (o !== state.hover) { state.hover = o; requestDraw(); }
       cL.style.cursor = o ? 'pointer' : TOOL_CURSOR.erase;
     } else {
-      const sel = findObj(state.sel), handle = sel && sel.isGrid && gridHandleAt(X, Y);
-      cL.style.cursor = handle ? HANDLE_CURSOR[handle] : sel && nearObject(sel, X, Y) ? 'move' : hitProbe(X, Y) ? 'grab' : TOOL_CURSOR[state.tool];
+      const handle = gridSelected() && gridHandleAt(X, Y);
+      cL.style.cursor = handle ? HANDLE_CURSOR[handle] : selectedAt(X, Y) ? 'move' : hitProbe(X, Y) ? 'grab' : TOOL_CURSOR[state.tool];
     }
     return;
   }
@@ -1864,19 +1900,21 @@ cL.addEventListener('pointercancel', endDrag);
 cL.addEventListener('pointerleave', () => { if (state.hover) { state.hover = null; requestDraw(); } });
 
 // dvojklik vybere křivku, vektory nebo grid (pak se dají táhnout), další dvojklik na ně je pustí;
-// dvojklik mimo všechno vrátí pohled roviny
+// dvojklik mimo všechno vrátí pohled roviny; s Ctrl se výběr skládá jednotlivými kliky, dvojklik se pak nepočítá
 let lastProbe = null;
 cL.addEventListener('dblclick', e => {
+  if (e.ctrlKey || e.metaKey) return;
   const [X, Y] = evPos(e, cL);
   if (state.tool === 'erase') { if (!hitObject(X, Y)) { fitLeft(); requestDraw(); tourNote('viewReset'); } return; }
   // první klik dvojkliku s nástrojem Vektory vložil vektory navíc, ty se vrátí
   if (state.tool === 'probe' && lastProbe && performance.now() - lastProbe.time < 700 && state.probes.at(-1)?.id === lastProbe.id) undo();
   lastProbe = null;
-  const o = hitObject(X, Y) || (inGrid(X, Y) || (state.sel === 'grid' && gridHandleAt(X, Y)) ? findObj('grid') : null);
+  const o = pickAt(X, Y);
   if (!o) { fitLeft(); requestDraw(); tourNote('viewReset'); return; }
-  state.sel = o.id === state.sel ? null : o.id;
-  if (!o.kind && !o.isGrid) state.selected = o.id;
-  cL.style.cursor = state.sel ? 'move' : TOOL_CURSOR[state.tool];
+  if (state.sel.has(o.id)) state.sel.delete(o.id);
+  else { state.sel.clear(); state.sel.add(o.id); if (!o.kind && !o.isGrid) state.selected = o.id; }
+  tourNote('select');
+  cL.style.cursor = state.sel.has(o.id) ? 'move' : TOOL_CURSOR[state.tool];
   requestDraw();
 });
 cR.addEventListener('dblclick', () => { state.autoCam = true; $('#autoCam').checked = true; refineForView(); requestDraw(); tourNote('viewReset'); });
@@ -2037,7 +2075,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'r' || e.key === 'R') { if (e.ctrlKey || e.metaKey) return; pause(); setT(0); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
-  else if (e.key === 'Escape') { state.sel = null; requestDraw(); }
+  else if (e.key === 'Escape') { state.sel.clear(); requestDraw(); }
   else if (e.key === 'ArrowRight' && tag !== 'INPUT') { pause(); setT(state.t + 0.05); }
   else if (e.key === 'ArrowLeft' && tag !== 'INPUT') { pause(); setT(state.t - 0.05); }
 });
@@ -2072,9 +2110,9 @@ const TOUR = [
     text: 'Dvojice vektorů v bodě ukáže, co s okolím udělá derivace: otočí ho a natáhne, úhel mezi vektory zůstane.',
     task: 'Vyber nástroj vektory, klikni do roviny z a pak táhni bodem nebo hroty.', done: b => more(b, 'probe') },
   { title: 'Výběr dvojklikem', targets: () => [$('#cL').parentElement], setup: () => setTool('free'),
-    text: 'Dvojklik na křivku nebo vektory je vybere. Pak s nimi jde táhnout a dalším dvojklikem je pustíš. Delete vybraný objekt smaže.',
+    text: 'Dvojklik na křivku nebo vektory je vybere a pak s nimi jde táhnout. Ctrl a klik přidá do výběru další objekt, klik mimo objekty nebo Esc výběr zruší a Delete vybrané smaže.',
     task: 'Dvojklikni na křivku a přetáhni ji jinam.', done: b => more(b, 'objMove') },
-  { title: 'Guma a Zpět', targets: () => [toolBtn('erase'), $('#undo')],
+  { title: 'Guma a Zpět', targets: () => [toolBtn('erase'), $('#undo'), $('#cL').parentElement],
     text: 'Guma smaže, na co klikneš. Tlačítko Zpět nebo Ctrl+Z vrátí každou změnu.',
     task: 'Vyber gumu, smaž jednu křivku a pak ji vrať tlačítkem Zpět.', done: b => more(b, 'erase') && more(b, 'undo') },
   { title: 'Grid', targets: () => [$('#cL').parentElement, $('#density').parentElement], setup: () => setTool('free'),
@@ -2102,7 +2140,8 @@ function showWelcome(first) {
     ? 'Za pár minut tě provedu základy: funkce, animace, kreslení, úhly, vektory a analytické rozšíření. Všechno si rovnou vyzkoušíš.'
     : 'Provede tě základy krok za krokem. Začne v prázdné rovině, takže to, co máš teď nakreslené, zmizí.';
   $('#welcomeStart').textContent = first ? 'Projít návod' : 'Začít';
-  $('#welcomeSkip').textContent = first ? 'Přeskočit a už neukazovat' : 'Zrušit';
+  $('#welcomeSkip').textContent = first ? 'Přeskočit návod' : 'Zrušit';
+  $('#welcomeNeverRow').hidden = !first; $('#welcomeNever').checked = false;
   $('#tourWelcome').hidden = false;
   $('#welcomeStart').focus();
 }
@@ -2112,6 +2151,7 @@ function startTour() {
   setTool('free');
   $('.side').scrollTop = 0;
   tour = { i: -1 };
+  tourResetAnim();
   $('#tourDim').removeAttribute('hidden'); $('#tourCard').hidden = false;   // SVG nemá vlastnost hidden, jen atribut
   tourGo(0);
   requestAnimationFrame(tourFollow);
@@ -2127,16 +2167,20 @@ function tourGo(i) {
   const st = TOUR[i];
   tour.i = i; tour.base = { ...tourStats }; tour.doneAt = 0;
   if (st.setup) st.setup();
+  // obsah karty se při výměně na okamžik ztlumí, karta mezitím dojíždí na nové místo
+  const cardEl = $('#tourCard');
+  cardEl.classList.add('swap'); setTimeout(() => cardEl.classList.remove('swap'), 160);
   $('#tourCount').textContent = `${i + 1} / ${TOUR.length}`;
   $('#tourTitle').textContent = st.title;
   $('#tourText').textContent = st.text;
   const task = $('#tourTask');
   task.hidden = !st.task; task.textContent = st.task || ''; task.classList.remove('done');
+  $('#tourPrev').hidden = i === 0;
   $('#tourNext').hidden = !st.info; $('#tourNext').textContent = st.last ? 'Hotovo' : 'Další';
   $('#tourSkip').hidden = !!st.info;
   $('#tourEnd').hidden = !!st.last;
   const first = st.targets().find(Boolean);
-  if (first && first.closest('.side')) first.scrollIntoView({ block: 'nearest' });
+  if (first) first.scrollIntoView({ block: 'nearest' });   // na telefonu i k rovinám pod panelem
   tourPlace();
 }
 // když je úkol splněný, odškrtne se a za chvíli jde další krok
@@ -2149,24 +2193,47 @@ function tourCheck() {
   const i = tour.i;
   setTimeout(() => { if (tour && tour.i === i) tourGo(i + 1); }, 1100);
 }
+// Karta i okna ve ztmavení plynule dojedou na místo dalšího kroku: každý snímek se přiblíží k cíli
+// (exponenciální dojezd, zhruba půl vteřiny), takže jedou i za posouváním panelu. Při omezeném pohybu skočí rovnou.
+const tourAnim = { card: null, holes: [], last: 0, snap: true };
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function tourResetAnim() {
+  $('#tourHoles').textContent = ''; $('#tourRings').textContent = '';
+  tourAnim.card = null; tourAnim.holes = []; tourAnim.last = 0; tourAnim.snap = true;
+}
 function tourPlace() {
   if (!tour) return;
   const st = TOUR[tour.i], W = innerWidth, H = innerHeight;
-  const rects = st.targets().filter(Boolean).map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
-  const ns = 'http://www.w3.org/2000/svg', holes = $('#tourHoles'), rings = $('#tourRings');
-  holes.textContent = ''; rings.textContent = '';
-  for (const r of rects) {
-    for (const [parent, cls] of [[holes, ''], [rings, 'tour-ring']]) {
-      const el = document.createElementNS(ns, 'rect');
-      el.setAttribute('x', r.left - 6); el.setAttribute('y', r.top - 6); el.setAttribute('width', r.width + 12); el.setAttribute('height', r.height + 12);
-      el.setAttribute('rx', 8); el.setAttribute('fill', 'black');
-      if (cls) el.setAttribute('class', cls);
-      parent.appendChild(el);
+  const rects = st.targets().filter(Boolean).map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0)
+    .map(r => ({ x: r.left - 6, y: r.top - 6, w: r.width + 12, h: r.height + 12 }));
+  const now = performance.now(), dt = Math.min(100, tourAnim.last ? now - tourAnim.last : 16);
+  tourAnim.last = now;
+  const k = tourAnim.snap || reduceMotion.matches ? 1 : 1 - Math.exp(-dt / 85);
+  tourAnim.snap = false;
+  const ease = (a, b) => a + (b - a) * k;
+  // okna: lišící se počet mezi kroky se vyrovná tak, že přebytečná okna se stáhnou do středu hlavního místa
+  const c0 = rects[0] ? { x: rects[0].x + rects[0].w / 2, y: rects[0].y + rects[0].h / 2 } : { x: W / 2, y: H / 2 };
+  const ns = 'http://www.w3.org/2000/svg';
+  for (let i = 0; i < Math.max(rects.length, tourAnim.holes.length); i++) {
+    const tgt = rects[i] || { x: c0.x, y: c0.y, w: 0, h: 0 };
+    let cur = tourAnim.holes[i];
+    if (!cur) {
+      const hole = document.createElementNS(ns, 'rect'), ring = document.createElementNS(ns, 'rect');
+      hole.setAttribute('rx', 8); hole.setAttribute('fill', 'black'); ring.setAttribute('rx', 8); ring.setAttribute('class', 'tour-ring');
+      $('#tourHoles').appendChild(hole); $('#tourRings').appendChild(ring);
+      const from = i > 0 && tourAnim.holes[0] ? { x: c0.x, y: c0.y, w: 0, h: 0 } : tgt;
+      cur = tourAnim.holes[i] = { ...from, hole, ring };
     }
+    cur.x = ease(cur.x, tgt.x); cur.y = ease(cur.y, tgt.y); cur.w = ease(cur.w, tgt.w); cur.h = ease(cur.h, tgt.h);
+    for (const el of [cur.hole, cur.ring]) {
+      el.setAttribute('x', cur.x); el.setAttribute('y', cur.y);
+      el.setAttribute('width', Math.max(0, cur.w)); el.setAttribute('height', Math.max(0, cur.h));
+    }
+    cur.ring.style.display = rects[i] || cur.w > 3 ? '' : 'none';
   }
   const card = $('#tourCard');
   if (W <= 700) return;   // na telefonu je karta dole přes celou šířku
-  const cw = card.offsetWidth, ch = card.offsetHeight, r = rects[0];
+  const cw = card.offsetWidth, ch = card.offsetHeight, r = rects[0] && { left: rects[0].x + 6, top: rects[0].y + 6, right: rects[0].x + rects[0].w - 6, bottom: rects[0].y + rects[0].h - 6 };
   let x = W / 2 - cw / 2, y = H / 2 - ch / 2;
   if (r) {
     if (r.left > cw + 20) { x = r.left - cw - 12; y = r.top; }           // vlevo od místa (u rovin přes panel s ovládáním)
@@ -2175,16 +2242,33 @@ function tourPlace() {
     else if (r.top > ch + 28) { x = r.left; y = r.top - ch - 18; }
     else { x = r.left + 24; y = r.bottom - ch - 24; }
   }
-  card.style.left = Math.min(W - cw - 12, Math.max(12, x)) + 'px';
-  card.style.top = Math.min(H - ch - 12, Math.max(12, y)) + 'px';
+  x = Math.min(W - cw - 12, Math.max(12, x)); y = Math.min(H - ch - 12, Math.max(12, y));
+  if (!tourAnim.card) tourAnim.card = { x, y };
+  tourAnim.card.x = ease(tourAnim.card.x, x); tourAnim.card.y = ease(tourAnim.card.y, y);
+  card.style.left = tourAnim.card.x + 'px'; card.style.top = tourAnim.card.y + 'px';
 }
 // karta a okna jdou za místem i při posouvání panelu nebo změně velikosti okna
 function tourFollow() { if (!tour) return; tourPlace(); requestAnimationFrame(tourFollow); }
 
 $('#tourBtn').addEventListener('click', () => showWelcome(false));
 $('#welcomeStart').addEventListener('click', startTour);
-$('#welcomeSkip').addEventListener('click', () => { $('#tourWelcome').hidden = true; if ($('#welcomeTitle').textContent !== 'Návod') tourMarkSeen(); });
+// Přeskočit: uvítání se příště ukáže znovu, jen když není zaškrtnuté Již nezobrazovat
+$('#welcomeSkip').addEventListener('click', () => { $('#tourWelcome').hidden = true; if ($('#welcomeNever').checked) tourMarkSeen(); });
+$('#tourPrev').addEventListener('click', () => { if (tour && tour.i > 0) tourGo(tour.i - 1); });
 $('#tourNext').addEventListener('click', () => { if (tour) tourGo(tour.i + 1); });
+// během návodu jde klikat jen na zvýrazněná místa a na kartu návodu; klávesnice zůstává volná
+function tourAllows(el) {
+  if (!tour || !(el instanceof Element)) return true;
+  if (el.closest('#tourCard, #tourWelcome')) return true;
+  return TOUR[tour.i].targets().some(t => t && t.contains(el));
+}
+// kolečko se blokuje jen nad rovinami, aby šlo dál posouvat panel a stránku
+for (const type of ['pointerdown', 'mousedown', 'click', 'dblclick', 'wheel', 'contextmenu']) {
+  window.addEventListener(type, e => {
+    if (type === 'wheel' && !(e.target instanceof HTMLCanvasElement)) return;
+    if (!tourAllows(e.target)) { e.preventDefault(); e.stopPropagation(); }
+  }, { capture: true, passive: false });
+}
 $('#tourSkip').addEventListener('click', () => { if (tour) tourGo(tour.i + 1); });
 $('#tourEnd').addEventListener('click', endTour);
 
