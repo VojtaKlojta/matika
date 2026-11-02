@@ -25,7 +25,7 @@
   --u-line: #5aaee8; --v-line: #f2a65a; --axis: #343a4a; --tick: #6c7387;
   --vec-a: #ff5c7a; --vec-b: #3fdc9a;
   --c1: #ffd75e; --c2: #f472b6; --c3: #b794f6; --c4: #2dd4bf; --c5: #e5e7eb;
-  --good: #4ade80; --bad: #f87171; --warn: #fbbf24;
+  --good: #4ade80; --bad: #f87171; --warn: #fbbf24; --sel: #2d3a5c;
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-math: "STIX Two Text", "Cambria Math", Cambria, "Times New Roman", serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -37,7 +37,7 @@
     --u-line: #1f77b4; --v-line: #d9711c; --axis: #c3c8d4; --tick: #8a91a3;
     --vec-a: #e11d48; --vec-b: #059669;
     --c1: #b7791f; --c2: #db2777; --c3: #7c3aed; --c4: #0d9488; --c5: #374151;
-    --good: #15803d; --bad: #b91c1c; --warn: #b45309;
+    --good: #15803d; --bad: #b91c1c; --warn: #b45309; --sel: #c9d6f2;
     color-scheme: light;
   }
 }
@@ -46,7 +46,7 @@
   --u-line: #1f77b4; --v-line: #d9711c; --axis: #c3c8d4; --tick: #8a91a3;
   --vec-a: #e11d48; --vec-b: #059669;
   --c1: #b7791f; --c2: #db2777; --c3: #7c3aed; --c4: #0d9488; --c5: #374151;
-  --good: #15803d; --bad: #b91c1c; --warn: #b45309;
+  --good: #15803d; --bad: #b91c1c; --warn: #b45309; --sel: #c9d6f2;
   color-scheme: light;
 }
 
@@ -130,7 +130,7 @@ select {
 #fn { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink); }
 input#fn { padding: 10px 0; font: 500 16px/1.2 var(--font-mono); }
 math-field#fn {
-  padding: 6px 0; font-size: 20px; --caret-color: var(--ink); --selection-background-color: var(--hair);
+  padding: 6px 0; font-size: 20px; --caret-color: var(--ink); --selection-background-color: var(--sel); --selection-color: var(--ink);
   --contains-highlight-background-color: transparent; --placeholder-color: var(--muted); --smart-fence-color: var(--muted);
 }
 math-field::part(menu-toggle) { display: none; }
@@ -214,6 +214,10 @@ math-field::part(menu-toggle) { display: none; }
 .pt { font: 500 20px/1.2 var(--font-math); white-space: nowrap; }
 .ps { font: 16px/1.2 var(--font-math); color: var(--muted); text-align: right; }
 .canvas-wrap { position: relative; flex: 1; min-height: 0; border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; background: var(--panel); }
+/* tenký pruh nahoře v rovině w, dokud se drahá funkce přepočítává */
+.progress { position: absolute; inset: 0 0 auto; height: 3px; pointer-events: none; opacity: 0; transition: opacity 0.4s; }
+.progress.on { opacity: 1; transition: none; }
+.progress i { display: block; height: 100%; background: var(--ink); transform: scaleX(0); transform-origin: left; transition: transform 0.15s linear; }
 canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .t-badge {
   position: absolute; top: 10px; right: 12px; pointer-events: none; padding: 2px 8px; border-radius: 4px;
@@ -258,12 +262,11 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
       <label class="eyebrow" for="fn">Funkce</label>
       <div class="fn-row" id="fnRow"><span class="fn-pre">f(z) =</span><math-field id="fn" aria-label="f(z)">z^2</math-field></div>
       <p class="err" id="fnErr" hidden></p>
-      <p class="hint" id="fnBusy" hidden>Počítám sumu nebo integrál…</p>
       <div class="chips" id="chips"></div>
       <div class="sublabel">protipříklady</div>
       <div class="chips" id="chipsBad"></div>
       <div class="badge" id="holo"></div>
-      <p class="hint">Piš jako v Desmosu: <code>/</code> udělá zlomek, <code>^</code> mocninu, <code>sum</code> sumu, <code>int</code> integrál (končí <code>dt</code>), <code>oo</code> nekonečno. Enter použije funkci a pustí animaci. Funkce: exp, log, sqrt, sin, cos, tan, sinh, abs, Re, Im, arg, conj, Γ, n! a podmínky if(|z| &lt; 1; a; b). Logaritmus, odmocnina a necelé mocniny berou arg z z intervalu [0, 2π), řez je na kladné reálné ose. Sumy a integrály se počítají numericky, u hranice oblasti konvergence je graf může utnout o kousek dřív.</p>
+      <p class="hint">Piš jako v Desmosu: <code>/</code> udělá zlomek, <code>^</code> mocninu, <code>sum</code> sumu, <code>int</code> integrál (končí <code>dt</code>), <code>oo</code> nekonečno. Šipky chodí po zápisu. Enter použije funkci a pustí animaci, Esc pole opustí, pak šipky posouvají t. Funkce: exp, log, sqrt, sin, cos, tan, sinh, abs, Re, Im, arg, conj, Γ, n! a podmínky if(|z| &lt; 1; a; b). Logaritmus, odmocnina a necelé mocniny berou arg z z intervalu [0, 2π), řez je na kladné reálné ose. Sumy a integrály se počítají numericky, u hranice oblasti konvergence je graf může utnout o kousek dřív.</p>
     </section>
 
     <section data-pane="ext" hidden>
@@ -349,7 +352,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     </div>
     <div class="panel">
       <div class="panel-head"><span class="pt">Rovina <i>w</i></span><span class="ps"><i>w</i> = (1 − <i>t</i>)·<i>z</i> + <i>t</i>·<i>f</i>(<i>z</i>)</span></div>
-      <div class="canvas-wrap"><canvas id="cR" aria-label="Rovina w, obraz pod funkcí"></canvas><div class="t-badge" id="tBadge">t = 0,00</div></div>
+      <div class="canvas-wrap"><canvas id="cR" aria-label="Rovina w, obraz pod funkcí"></canvas><div class="t-badge" id="tBadge">t = 0,00</div><div class="progress" id="progress" role="progressbar" aria-label="Přepočet"><i></i></div></div>
     </div>
   </main>
 </div>
@@ -1013,6 +1016,21 @@ const fnEl = (() => {
     el.smartFence = true;
     el.mathVirtualKeyboardPolicy = 'auto';
     el.inlineShortcuts = SHORTCUTS;
+    // lomítko udělá zlomek na každé klávesnici; MathLive na rozložení, které nezná (česká: Shift + ú), vloží jen znak /
+    // Esc pole pustí (MathLive by jinak přepnul do psaní LaTeXu)
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && el.mode === 'math') { e.preventDefault(); e.stopPropagation(); el.blur(); return; }
+      const altGr = e.getModifierState && e.getModifierState('AltGraph');
+      if (e.key !== '/' || ((e.ctrlKey || e.metaKey || e.altKey) && !altGr) || el.mode !== 'math') return;
+      e.preventDefault(); e.stopPropagation();
+      el.executeCommand(['insert', '\\frac{#@}{#?}']);
+    }, true);
+    // / vložené jako text bez stisku klávesy (klávesnice na displeji, diktování)
+    el.addEventListener('beforeinput', e => {
+      if (e.composedPath()[0] === el || e.inputType !== 'insertText' || e.data !== '/' || el.mode !== 'math') return;
+      e.preventDefault(); e.stopPropagation();
+      el.executeCommand(['insert', '\\frac{#@}{#?}']);
+    }, true);
     return el;
   }
   const inp = document.createElement('input');
@@ -1215,26 +1233,32 @@ function samplePath(P, N0, G, scale) {
   return { z: Float64Array.from(zs), f: Float64Array.from(fs) };
 }
 
-function computeLines() {
-  const g = state.grid, lines = [];
-  if (g.type !== 'none') {
-    const P = gridParam(g), [nu, nv] = gridCounts(g), polar = g.type === 'polar';
-    for (let k = 0; k <= nu; k++) {
-      if (polar && k === 0 && !(g.r0 > 0)) continue;
-      const u = k / nu;
-      lines.push({ fam: 0, w: (!polar && (k === 0 || k === nu)) || (polar && k === nu) ? 1 : 0, ...samplePath(s => P(u, s), 160) });
-    }
-    for (let k = 0; k < (polar ? nv : nv + 1); k++) {
-      const v = k / nv;
-      lines.push({ fam: 1, w: !polar && (k === 0 || k === nv) ? 1 : 0, ...samplePath(s => P(s, v), 160) });
-    }
-    if (!polar) {
-      if (g.x0 < 0 && g.x1 > 0) lines.push({ fam: 0, w: 2, ...samplePath(s => [0, g.y0 + s * (g.y1 - g.y0)], 160) });
-      if (g.y0 < 0 && g.y1 > 0) lines.push({ fam: 1, w: 2, ...samplePath(s => [g.x0 + s * (g.x1 - g.x0), 0], 160) });
-    }
-  }
+// čáry gridu se přidávají do state.lines jedna po druhé; jako krok přepočtu po kouscích (viz recomputeJob)
+function* linesJob() {
+  const g = state.grid, lines = [], todo = [];
   state.lines = lines;
+  if (g.type === 'none') return;
+  const P = gridParam(g), [nu, nv] = gridCounts(g), polar = g.type === 'polar';
+  for (let k = 0; k <= nu; k++) {
+    if (polar && k === 0 && !(g.r0 > 0)) continue;
+    const u = k / nu;
+    todo.push([0, (!polar && (k === 0 || k === nu)) || (polar && k === nu) ? 1 : 0, s => P(u, s)]);
+  }
+  for (let k = 0; k < (polar ? nv : nv + 1); k++) {
+    const v = k / nv;
+    todo.push([1, !polar && (k === 0 || k === nv) ? 1 : 0, s => P(s, v)]);
+  }
+  if (!polar) {
+    if (g.x0 < 0 && g.x1 > 0) todo.push([0, 2, s => [0, g.y0 + s * (g.y1 - g.y0)]]);
+    if (g.y0 < 0 && g.y1 > 0) todo.push([1, 2, s => [g.x0 + s * (g.x1 - g.x0), 0]]);
+  }
+  for (let i = 0; i < todo.length; i++) {
+    const [fam, w, path] = todo[i];
+    lines.push({ fam, w, ...samplePath(path, 160) });
+    yield (i + 1) / todo.length;
+  }
 }
+const computeLines = () => runJob(linesJob());
 
 // ---------- křivky ----------
 function curveParam(c) {
@@ -1359,14 +1383,63 @@ function imageBox(fn) {
 }
 function computeImgBox() { state.imgBox = imageBox(null); }
 
-function recomputeAll() {
+// ---------- přepočet po kouscích ----------
+// Kroky přepočtu jsou generátory, které hlásí, kolik mají hotovo (0 až 1). Levná funkce se spočítá hned celá.
+// Drahá (sumy, integrály) se počítá po kouscích mezi snímky: stránka nestojí, čáry gridu přibývají a pruh v rovině w
+// ukazuje postup. Nový přepočet ten rozpracovaný zahodí.
+function runJob(gen) { let r = gen.next(); while (!r.done) r = gen.next(); return r.value; }
+function* scaled(gen, a, b) { let r = gen.next(); while (!r.done) { yield a + (b - a) * r.value; r = gen.next(); } return r.value; }
+
+function* recomputeJob() {
   finishExtension();
-  computeLattice(); computeTol(); computeLines();
-  for (const c of state.curves) computeCurve(c);
+  computeLattice(); computeTol();
+  yield 0.02;   // tady už je známá cena funkce (costly) a rozhodne se, jestli po kouscích
+  for (let i = 0; i < state.curves.length; i++) { computeCurve(state.curves[i]); yield 0.02 + 0.06 * (i + 1) / state.curves.length; }
   computeIntersections();
   for (const pr of state.probes) fillFData(pr, [pr.a, pr.b]);
-  checkHolo(); computeImgBox(); computeEdge(); requestDraw();
+  checkHolo(); computeImgBox();
+  // poměr čar a hranice podle měření u Σ zⁿ/n: hranice trvá zhruba dvakrát déle než čáry
+  const edge = needEdge();
+  yield* scaled(linesJob(), 0.08, edge ? 0.38 : 1);
+  yield* scaled(edgeJob(), 0.38, 1);
 }
+
+let job = null, afterJob = [];
+const progressEl = $('#progress');
+function showProgress(p) {
+  if (p === null) { progressEl.classList.remove('on'); return; }
+  const bar = progressEl.firstElementChild;
+  if (!progressEl.classList.contains('on')) { bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; void bar.offsetWidth; bar.style.transition = ''; }
+  progressEl.classList.add('on');
+  bar.style.transform = `scaleX(${p})`;
+  progressEl.setAttribute('aria-valuenow', Math.round(100 * p));
+}
+function jobDone() {
+  job = null; showProgress(null); requestDraw();
+  const cbs = afterJob; afterJob = [];
+  if (cbs.length) setTimeout(() => cbs.forEach(cb => cb()), 0);
+}
+function stepJob(gen) {
+  if (job !== gen) return;
+  const t0 = performance.now();
+  let r;
+  do r = gen.next(); while (!r.done && performance.now() - t0 < 30);
+  if (r.done) { jobDone(); return; }
+  showProgress(r.value); requestDraw();
+  setTimeout(() => stepJob(gen), 0);
+}
+function recomputeAll() {
+  const gen = recomputeJob();
+  job = null;
+  gen.next();
+  if (!costly()) { runJob(gen); jobDone(); return; }
+  job = gen; showProgress(0.02); requestDraw();
+  setTimeout(() => stepJob(gen), 0);
+}
+// dopočítá rozpracovaný přepočet hned (rozšíření potřebuje hotové čáry)
+function finishJob() { if (job) { const gen = job; job = null; runJob(gen); jobDone(); } }
+// cb až bude přepočet hotový (Enter pustí animaci až s hotovým gridem)
+function whenIdle(cb) { if (job) afterJob.push(cb); else cb(); }
 
 // ---------- pohledy ----------
 const cL = $('#cL'), cR = $('#cR'), ctxL = cL.getContext('2d'), ctxR = cR.getContext('2d');
@@ -1404,6 +1477,7 @@ let refineTimer = 0;
 function refineForView() {
   clearTimeout(refineTimer);
   refineTimer = setTimeout(() => {
+    if (job) { refineForView(); return; }   // počká, až doběhne přepočet po kouscích
     if (state.ext || !state.imgBox) return;
     const sFit = fitView(state.imgBox, sizeR.w, sizeR.h).s;
     const want = state.autoCam ? 1 : Math.min(1, Math.max(1 / 8, sFit / state.viewR.s));
@@ -2082,9 +2156,11 @@ function inGridShape(x, y) {
 }
 // lomené čáry v rovině z → úseky {z, f} s obrazem funkcí mapFn. Přeruší se mimo oblast gridu a tam, kde obraz uteče
 // daleko za obraz gridu (u pólu na hranici); jinak by zjemňování u pólu spotřebovalo body pro zbytek hranice.
-// Vzorkuje se po kusech o nejvýš EDGE_CHUNK uzlech, každý kus má vlastní rozpočet bodů. coarse > 1 = hrubší tolerance.
+// Vzorkuje se po kusech o nejvýš EDGE_CHUNK uzlech (u drahé funkce po čtvrtinách, ať přepočet po kouscích hlásí postup
+// častěji), každý kus má vlastní rozpočet bodů. coarse > 1 = hrubší tolerance.
 const EDGE_CHUNK = 160;
-function edgePieces(lines, mapFn, coarse = 1) {
+const edgePieces = (lines, mapFn, coarse) => runJob(edgePiecesJob(lines, mapFn, coarse));
+function* edgePiecesJob(lines, mapFn, coarse = 1) {
   const out = [], b = state.imgBox;
   const cx = b ? (b.x0 + b.x1) / 2 : 0, cy = b ? (b.y0 + b.y1) / 2 : 0;
   const R = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0, 1e-3) : Infinity, far = 40 * R;
@@ -2096,6 +2172,8 @@ function edgePieces(lines, mapFn, coarse = 1) {
     for (let k = 1; k < CH; k++) if (!near([a[0] + (b[0] - a[0]) * k / CH, a[1] + (b[1] - a[1]) * k / CH])) return false;
     return true;
   };
+  const total = lines.reduce((n, l) => n + l.length, 0) || 1, chunk = costly() ? EDGE_CHUNK / 4 : EDGE_CHUNK;
+  let done = 0, told = 0;
   for (const line of lines) {
     let run = [], prev = null;
     const flush = keepLast => {
@@ -2111,30 +2189,42 @@ function edgePieces(lines, mapFn, coarse = 1) {
     for (const p of line) {
       const ok = inGridShape(p[0], p[1]) && near(p);
       if (ok && prev && !chordNear(prev, p)) flush(false);
-      if (ok) { run.push(p); if (run.length > EDGE_CHUNK) flush(true); }
+      if (ok) { run.push(p); if (run.length > chunk) flush(true); }
       else flush(false);
       prev = ok ? p : null;
+      done++;
+      if (out.length !== told) { told = out.length; yield done / total; }
     }
     flush(false);
+    yield done / total;
   }
   return out;
 }
 // přesná hranice oblasti, kde je dom definovaná: rastr 240 uzlů napříč (u drahé funkce 120) a bisekce na každé hraně
-function domainEdge(dom, mapFn) {
+const domainEdge = (dom, mapFn) => runJob(domainEdgeJob(dom, mapFn));
+function* domainEdgeJob(dom, mapFn) {
   const g = state.grid, RW = rasterW(), RH = Math.max(RW / 6 | 0, Math.min(2 * RW, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
   const ok = z => { const w = dom(z); return isFinite(w[0]) && isFinite(w[1]); };
   const inside = new Uint8Array(RW * RH);
-  for (let k = 0; k < inside.length; k++) inside[k] = ok(nodeXY(g, RW, RH, k)) ? 1 : 0;
-  const lines = contourLines(RW, RH, inside, (a, b) => {
+  for (let j = 0; j < RH; j++) {
+    for (let k = j * RW; k < (j + 1) * RW; k++) inside[k] = ok(nodeXY(g, RW, RH, k)) ? 1 : 0;
+    yield 0.25 * (j + 1) / RH;
+  }
+  // body hranice se napřed jen založí a bisekce je doplní po kouscích (čáry z contourLines drží tytéž pole)
+  const todo = [];
+  const lines = contourLines(RW, RH, inside, (a, b) => { const p = [0, 0]; todo.push([p, a, b]); return p; });
+  for (let n = 0; n < todo.length; n++) {
+    const [pt, a, b] = todo[n];
     let p = nodeXY(g, RW, RH, a), q = nodeXY(g, RW, RH, b);
     if (!inside[a]) [p, q] = [q, p];   // p uvnitř, q venku
-    for (let it = 0, n = costly() ? 5 : 14; it < n; it++) {
+    for (let it = 0, steps = costly() ? 5 : 14; it < steps; it++) {
       const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
       if (ok(m)) p = m; else q = m;
     }
-    return p;
-  });
-  return edgePieces(lines, mapFn, costly() ? 4 : 1);
+    pt[0] = p[0]; pt[1] = p[1];
+    if (n % 8 === 7) yield 0.25 + 0.25 * (n + 1) / todo.length;
+  }
+  return yield* scaled(edgePiecesJob(lines, mapFn, costly() ? 4 : 1), 0.5, 1);
 }
 // hranice dorostlého gridu během rozšíření: vrstevnice vzdálenosti od oblasti konvergence. Počítá se v každém snímku
 // a hýbe se, proto s tolerancí jako bez přiblížení (zjemnění po zoomu roviny w by animaci zpomalilo)
@@ -2156,13 +2246,17 @@ function edgeMapFn() {
 }
 // hranice závisí jen na funkci a oblasti gridu, ne na hustotě, proto se pamatuje
 let edgeKey = '';
-function computeEdge() {
-  const g = state.grid, key = [state.fsrc, state.extIdx, g.type, g.x0, g.x1, g.y0, g.y1, g.r0, state.tolFactor].join('|');
-  const ex = EXTENSIONS[state.extIdx], onEx = !!ex && norm(state.fsrc) === norm(ex.f);
+const edgeOnEx = () => { const ex = EXTENSIONS[state.extIdx]; return !!ex && norm(state.fsrc) === norm(ex.f); };
+const edgeKeyNow = () => { const g = state.grid; return [state.fsrc, state.extIdx, g.type, g.x0, g.x1, g.y0, g.y1, g.r0, state.tolFactor].join('|'); };
+// bude se hranice počítat znovu? (podle toho přepočet dělí pruh mezi čáry a hranici)
+const needEdge = () => (state.partial || edgeOnEx()) && !(edgeKeyNow() === edgeKey && state.edge);
+function* edgeJob() {
+  const key = edgeKeyNow(), onEx = edgeOnEx();
   if (!state.partial && !onEx) { state.edge = null; edgeKey = ''; return; }
   if (key === edgeKey && state.edge) return;
-  edgeKey = key;
-  state.edge = domainEdge(onEx ? extDomain(ex) : FN, edgeMapFn());
+  state.edge = null; edgeKey = '';
+  const edge = yield* domainEdgeJob(onEx ? extDomain(EXTENSIONS[state.extIdx]) : FN, edgeMapFn());
+  state.edge = edge; edgeKey = key;
 }
 function currentEdge() {
   const x = state.ext;
@@ -2213,7 +2307,7 @@ function extend() {
   const dom = compile(ex.f), edgeDom = extDomain(ex), fromBox = state.imgBox && { ...state.imgBox };
   if (norm(state.fsrc) !== norm(ex.ext)) {
     setField(ex.ext);
-    applyFunction(ex.ext, false, true);
+    applyFunction(ex.ext, false, true); finishJob();
     startGrowth(dom, +1, fromBox, state.imgBox && { ...state.imgBox }, null, edgeDom);
   } else {
     startGrowth(dom, -1, fromBox, imageBox(dom), ex.f, edgeDom);
@@ -2516,23 +2610,33 @@ sceneSel.addEventListener('change', () => { if (sceneSel.value !== '') loadScene
 // psaní do pole: funkce se použije chvíli po posledním znaku, Enter ji použije hned a pustí animaci
 let fnTimer = 0;
 function fieldFn() { try { return readField(); } catch (e) { showFnErr(e.message); return null; } }
+// suma nebo integrál: pruh se ukáže hned a výpočet začne až po vykreslení, then až s hotovým přepočtem
 function applyHeavy(src, then) {
-  if (!/\b(sum|int)\(/.test(norm(src))) { if (applyFunction(src) && then) then(); return; }
-  $('#fnBusy').hidden = false;
-  requestAnimationFrame(() => setTimeout(() => { const ok = applyFunction(src); $('#fnBusy').hidden = true; if (ok && then) then(); }, 0));
+  const run = () => { if (applyFunction(src) && then) whenIdle(then); };
+  if (!/\b(sum|int)\(/.test(norm(src))) { run(); return; }
+  showProgress(0);
+  let started = false;
+  const go = () => { if (started) return; started = true; run(); if (!job) showProgress(null); };
+  requestAnimationFrame(() => setTimeout(go, 0));
+  setTimeout(go, 100);   // skrytá karta snímky nekreslí
 }
 fnEl.addEventListener('input', () => {
   clearTimeout(fnTimer);
   fnTimer = setTimeout(() => { const src = fieldFn(); if (src !== null) applyHeavy(src); }, 450);
 });
+// Enter funkci použije, pole pustí (šipky a mezerník pak ovládají animaci) a pustí animaci; Esc pole jen pustí.
+// Zachytává se dřív než v MathLive, ten Enter a Esc dál nepouští.
 fnEl.addEventListener('keydown', e => {
-  if (e.key !== 'Enter') return;
-  e.preventDefault();
+  if (e.key === 'Escape') { fnEl.blur(); return; }
+  if (e.key !== 'Enter' || (ML && fnEl.mode !== 'math')) return;
+  e.preventDefault(); e.stopPropagation();
   clearTimeout(fnTimer);
   const src = fieldFn();
+  if (src === null) return;
+  fnEl.blur();
   const go = () => { pause(); setT(0); togglePlay(); };
-  if (src !== null) { if (norm(src) !== norm(state.fsrc)) applyHeavy(src, go); else go(); }
-});
+  if (norm(src) !== norm(state.fsrc)) applyHeavy(src, go); else whenIdle(go);
+}, true);
 
 // záložky Funkce a Rozšíření přepínají horní část panelu, zbytek je společný
 function showTab(name) {
