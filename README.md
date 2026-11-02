@@ -8,6 +8,8 @@ Interaktivní ukázky ke Škole matiky. Web: https://matika.vojtakloud.com. Auto
 - `fonts/`: písma uložená u stránky (Raleway, Space Grotesk, IBM Plex Sans a Mono, STIX Two Text; SIL Open Font
   License). Písma graferů stáhne `python _nastroje/stahni_pisma.py`. Stránky nic nenačítají z cizích serverů,
   nemají cookies ani analytiku.
+- `knihovny/mathlive/`: MathLive 0.98.6 (MIT, licence v `LICENSE.txt`), editor vzorců pro pole f(z): píše se jako
+  v Desmosu. Sestavení přepíše odkazy z CDN na tuhle kopii.
 - `CNAME`: `matika.vojtakloud.com` (DNS u Webglobe: CNAME `matika` → `vojtaklojta.github.io.`).
 
 Složky začínající podtržítkem GitHub Pages nezveřejňuje.

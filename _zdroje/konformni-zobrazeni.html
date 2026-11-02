@@ -3,6 +3,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,500;1,400;1,500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathlive@0.98.6/dist/mathlive-fonts.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathlive@0.98.6/dist/mathlive-static.css">
 <style>
 /* Rozvržení: úzký panel s ovládáním vlevo, vedle dvě stejně velké roviny (z = příprava, w = obraz).
    Ovládání je jednobarevné, barvu nese jen matematika (grid, křivky, vektory). */
@@ -113,7 +115,17 @@ select {
 .fn-row:focus-within { border-color: var(--ink); }
 .fn-row.bad { border-color: var(--bad); }
 .fn-pre { font: italic 18px/1 var(--font-math); color: var(--muted); white-space: nowrap; }
-#fn { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; padding: 10px 0; font: 500 16px/1.2 var(--font-mono); }
+#fn { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink); }
+input#fn { padding: 10px 0; font: 500 16px/1.2 var(--font-mono); }
+math-field#fn {
+  padding: 6px 0; font-size: 20px; --caret-color: var(--ink); --selection-background-color: var(--hair);
+  --contains-highlight-background-color: transparent; --placeholder-color: var(--muted); --smart-fence-color: var(--muted);
+}
+math-field::part(menu-toggle) { display: none; }
+@media (pointer: fine) { math-field::part(virtual-keyboard-toggle) { display: none; } }
+.tabs { flex: none; }
+.tabs button { padding: 8px 4px; font-size: 14px; }
+.ext-fn { flex: 1; min-width: 0; padding: 8px 0; font-size: 17px; overflow-x: auto; }
 .err { margin: 0; font-size: 12.5px; color: var(--bad); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
@@ -220,20 +232,34 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
       </div>
     </header>
 
-    <section>
+    <div class="seg tabs" role="tablist" aria-label="Co zkoumat">
+      <button type="button" role="tab" data-tab="fn" class="on" aria-selected="true">Funkce</button>
+      <button type="button" role="tab" data-tab="ext" aria-selected="false">Rozšíření</button>
+    </div>
+
+    <section data-pane="fn">
       <label class="eyebrow" for="scene">Ukázková scéna</label>
       <select id="scene"></select>
     </section>
 
-    <section>
+    <section data-pane="fn">
       <label class="eyebrow" for="fn">Funkce</label>
-      <div class="fn-row" id="fnRow"><span class="fn-pre">f(z) =</span><input id="fn" type="text" spellcheck="false" autocomplete="off" value="z^2"></div>
+      <div class="fn-row" id="fnRow"><span class="fn-pre">f(z) =</span><math-field id="fn" aria-label="f(z)">z^2</math-field></div>
       <p class="err" id="fnErr" hidden></p>
+      <p class="hint" id="fnBusy" hidden>Počítám sumu nebo integrál…</p>
       <div class="chips" id="chips"></div>
       <div class="sublabel">protipříklady</div>
       <div class="chips" id="chipsBad"></div>
       <div class="badge" id="holo"></div>
-      <p class="hint">Enter použije funkci a pustí animaci. Jde psát <code>z</code>, <code>x</code>, <code>y</code>, <code>i</code>, <code>exp</code>, <code>log</code>, <code>sin</code>, <code>sqrt</code>, <code>conj</code>, <code>re</code>, <code>im</code>, <code>abs</code>, <code>gamma</code>, mocniny <code>^</code> a podmínky <code>if(abs(z) &lt; 1; a; b)</code>. Logaritmus, odmocnina a necelé mocniny berou arg z z intervalu [0, 2π), řez je na kladné reálné ose.</p>
+      <p class="hint">Piš jako v Desmosu: <code>/</code> udělá zlomek, <code>^</code> mocninu, <code>sum</code> sumu, <code>int</code> integrál (končí <code>dt</code>), <code>oo</code> nekonečno. Enter použije funkci a pustí animaci. Funkce: exp, log, sqrt, sin, cos, tan, sinh, abs, Re, Im, arg, conj, Γ, n! a podmínky if(|z| &lt; 1; a; b). Logaritmus, odmocnina a necelé mocniny berou arg z z intervalu [0, 2π), řez je na kladné reálné ose. Sumy a integrály se počítají numericky, u hranice oblasti konvergence je graf může utnout o kousek dřív.</p>
+    </section>
+
+    <section data-pane="ext" hidden>
+      <span class="eyebrow">Analytické rozšíření</span>
+      <div class="fn-row"><span class="fn-pre">f(z) =</span><span class="ext-fn" id="extFn"></span></div>
+      <div class="ext-list" id="extList"></div>
+      <p class="hint" id="extNote"></p>
+      <button class="btn ext-btn" id="extBtn" type="button" disabled>Rozšířit</button>
     </section>
 
     <section>
@@ -247,13 +273,6 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
         <button type="button" data-d="5">pomalu</button><button type="button" data-d="2.6" class="on">normálně</button><button type="button" data-d="1.3">rychle</button>
       </div>
       <label class="check"><input type="checkbox" id="autoCam" checked> kamera sleduje obraz</label>
-    </section>
-
-    <section>
-      <span class="eyebrow">Analytické rozšíření</span>
-      <div class="ext-list" id="extList"></div>
-      <p class="hint" id="extNote"></p>
-      <button class="btn ext-btn" id="extBtn" type="button" disabled>Rozšířit</button>
     </section>
 
     <section>
@@ -353,6 +372,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/mathlive@0.98.6/dist/mathlive.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -398,22 +418,58 @@ function cgamma(z) {
 }
 const C_ONE = [1, 0], C_ZERO = [0, 0], C_NAN = [NaN, NaN];
 
-// ---------- parser výrazu f(z) ----------
+// ---------- výrazy f(z): text i LaTeX → strom → funkce ----------
+// Strom: {k: 'num', v, c} | {k: 'var', v} | {k: 'neg', a} | {k: 'add' | 'sub' | 'mul' | 'div' | 'pow', a, b}
+// | {k: 'fn', f, a} | {k: 'cmp', op, a, b} | {k: 'if', c, a, b} | {k: 'sum' | 'int', v, lo, hi, a}.
+// Text je zápis grafu (z^2, if(abs(z) < 1; …), sum(n; 0; inf; z^n)), LaTeX píše pole f(z) jako v Desmosu.
+function cfact(a) {
+  if (a[1] === 0 && Number.isInteger(a[0]) && a[0] >= 0 && a[0] <= 170) { let r = 1; for (let k = 2; k <= a[0]; k++) r *= k; return [r, 0]; }
+  return cgamma([a[0] + 1, a[1]]);
+}
 const FUNCS = {
   exp: cexp, log: clog, ln: clog, sqrt: csqrt,
   sin: csin, cos: ccos, tan: a => cdiv(csin(a), ccos(a)), cot: a => cdiv(ccos(a), csin(a)),
   sinh: csinh, cosh: ccosh, tanh: a => cdiv(csinh(a), ccosh(a)),
   conj: a => [a[0], -a[1]], re: a => [a[0], 0], im: a => [a[1], 0],
-  abs: a => [Math.hypot(a[0], a[1]), 0], arg: a => [arg2pi(a), 0], gamma: cgamma,
+  abs: a => [Math.hypot(a[0], a[1]), 0], arg: a => [arg2pi(a), 0], gamma: cgamma, fact: cfact,
 };
-const CONSTS = { i: [0, 1], e: [Math.E, 0], pi: [Math.PI, 0] };
+const CONSTS = { i: [0, 1], e: [Math.E, 0], pi: [Math.PI, 0], inf: [Infinity, 0], infty: [Infinity, 0], oo: [Infinity, 0] };
 const VARS = ['z', 'x', 'y'];
-const NAMES = [...Object.keys(FUNCS), ...Object.keys(CONSTS), ...VARS, 'if'].sort((a, b) => b.length - a.length);
+const BOUND = ['n', 'k', 'm', 'j', 't', 's', 'u', 'v'];   // proměnné, které váže suma nebo integrál
+const NAMES = [...Object.keys(FUNCS).filter(f => f !== 'fact'), ...Object.keys(CONSTS), ...VARS, ...BOUND, 'if', 'sum', 'int']
+  .sort((a, b) => b.length - a.length);
+const STARTS = ['num', 'var', 'func', 'if', 'sum', 'int', '('];   // čím může začínat činitel (implicitní násobení)
+
+// slovo z písmen rozdělí na známá jména (sinz → sin, z); d před vázanou proměnnou je diferenciál integrálu
+function splitWord(word, out, tex) {
+  const w = word.toLowerCase();
+  let k = 0;
+  while (k < w.length) {
+    if (tex && w[k] === 'd' && BOUND.includes(w[k + 1])) { out.push({ t: 'd', v: w[k + 1], s: 'd' + w[k + 1] }); k += 2; continue; }
+    const name = NAMES.find(n => w.startsWith(n, k));
+    if (!name) throw new Error(`Neznám „${word}“.`);
+    if (name === 'if' || name === 'sum' || name === 'int') out.push({ t: name, s: name });
+    else if (FUNCS[name]) out.push({ t: 'func', v: name, s: name });
+    else if (CONSTS[name]) out.push({ t: 'num', v: CONSTS[name], c: name === 'i' || name === 'e' || name === 'pi' ? name : 'inf', s: name });
+    else out.push({ t: 'var', v: name, s: name });
+    k += name.length;
+  }
+}
+// implicitní násobení: 2z, iz, z(z+1), (z+1)(z-1), n!z
+function implicit(raw, starts) {
+  const out = [];
+  for (const tk of raw) {
+    const prev = out[out.length - 1];
+    if (prev && ['num', 'var', ')', '!'].includes(prev.t) && starts.includes(tk.t)) out.push({ t: 'imp', s: '·' });
+    out.push(tk);
+  }
+  return out;
+}
 
 function tokenize(src) {
-  const s = src.replace(/[−–—]/g, '-').replace(/[·×⋅]/g, '*').replace(/\*\*/g, '^').replace(/π/g, 'pi')
+  const s = src.replace(/[−–—]/g, '-').replace(/[·×⋅]/g, '*').replace(/\*\*/g, '^').replace(/π/g, 'pi').replace(/∞/g, 'inf')
     .replace(/²/g, '^2').replace(/³/g, '^3').replace(/√/g, 'sqrt').replace(/z̄/g, 'conj(z)').replace(/Γ/g, 'gamma')
-    .replace(/≤/g, '<=').replace(/≥/g, '>=');
+    .replace(/Σ/g, 'sum').replace(/∫/g, 'int').replace(/≤/g, '<=').replace(/≥/g, '>=');
   const raw = [];
   let i = 0;
   while (i < s.length) {
@@ -423,118 +479,538 @@ function tokenize(src) {
     let m = /^(\d+(?:[.,]\d+)?|\.\d+)/.exec(rest);
     if (m) { raw.push({ t: 'num', v: [parseFloat(m[0].replace(',', '.')), 0], s: m[0] }); i += m[0].length; continue; }
     m = /^[a-zA-Z]+/.exec(rest);
-    if (m) {
-      const w = m[0].toLowerCase();
-      let k = 0;
-      while (k < w.length) {
-        const name = NAMES.find(n => w.startsWith(n, k));
-        if (!name) throw new Error(`Neznám „${m[0]}“.`);
-        if (name === 'if') raw.push({ t: 'if', s: name });
-        else if (FUNCS[name]) raw.push({ t: 'func', v: name, s: name });
-        else if (CONSTS[name]) raw.push({ t: 'num', v: CONSTS[name], s: name });
-        else raw.push({ t: 'var', v: name, s: name });
-        k += name.length;
-      }
-      i += m[0].length; continue;
-    }
+    if (m) { splitWord(m[0], raw, false); i += m[0].length; continue; }
     const two = rest.slice(0, 2);
     if (two === '<=' || two === '>=') { raw.push({ t: two, s: two }); i += 2; continue; }
-    // argumenty if odděluje středník (čárka mezi číslicemi je desetinná)
-    if ('+-*/^()<>;,'.includes(ch)) { raw.push({ t: ch === ',' ? ';' : ch, s: ch }); i++; continue; }
+    // argumenty if, sum a int odděluje středník (čárka mezi číslicemi je desetinná)
+    if ('+-*/^()<>;,!'.includes(ch)) { raw.push({ t: ch === ',' ? ';' : ch, s: ch }); i++; continue; }
     throw new Error(`Nečekaný znak „${ch}“.`);
   }
-  // implicitní násobení: 2z, iz, z(z+1), (z+1)(z-1)
-  const out = [];
-  for (const tk of raw) {
-    const prev = out[out.length - 1];
-    if (prev && (prev.t === 'num' || prev.t === 'var' || prev.t === ')') && (tk.t === 'num' || tk.t === 'var' || tk.t === 'func' || tk.t === 'if' || tk.t === '(')) out.push({ t: 'imp', s: '·' });
-    out.push(tk);
-  }
-  return out;
+  return implicit(raw, STARTS);
 }
 
-function compile(src) {
+function parseText(src) {
   if (!src.trim()) throw new Error('Napiš funkci, třeba z^2.');
   const T = tokenize(src);
   let p = 0;
   const is = (...ts) => p < T.length && ts.includes(T[p].t);
   const take = () => T[p++];
   const close = () => { if (!is(')')) throw new Error('Chybí „)“.'); take(); };
-  // porovnání reálných částí, výsledek 1 nebo 0 (pro if)
+  const semi = what => { if (!is(';')) throw new Error(`V ${what} chybí středník.`); take(); };
   function cmp() {
-    const A = add();
-    if (!is('<', '>', '<=', '>=')) return A;
-    const op = take().t, B = add();
-    return z => {
-      const a = A(z)[0], b = B(z)[0];
-      if (!(isFinite(a) && isFinite(b))) return C_NAN;
-      return (op === '<' ? a < b : op === '>' ? a > b : op === '<=' ? a <= b : a >= b) ? C_ONE : C_ZERO;
-    };
+    const a = add();
+    if (!is('<', '>', '<=', '>=')) return a;
+    const op = take().t;
+    return { k: 'cmp', op, a, b: add() };
   }
   function add() {
     let a = mul();
-    while (is('+', '-')) { const op = take().t, A = a, B = mul(); a = op === '+' ? z => cadd(A(z), B(z)) : z => csub(A(z), B(z)); }
+    while (is('+', '-')) { const op = take().t; a = { k: op === '+' ? 'add' : 'sub', a, b: mul() }; }
     return a;
   }
   function mul() {
     let a = unary();
-    while (is('*', '/', 'imp')) { const op = take().t, A = a, B = unary(); a = op === '/' ? z => cdiv(A(z), B(z)) : z => cmul(A(z), B(z)); }
+    while (is('*', '/', 'imp')) { const op = take().t; a = { k: op === '/' ? 'div' : 'mul', a, b: unary() }; }
     return a;
   }
   function unary() {
-    if (is('-')) { take(); const A = unary(); return z => { const v = A(z); return [-v[0], -v[1]]; }; }
+    if (is('-')) { take(); return { k: 'neg', a: unary() }; }
     if (is('+')) { take(); return unary(); }
     return power();
   }
   function power() {
-    const A = primary();
-    if (is('^')) { take(); const B = expo(); return z => cpow(A(z), B(z)); }
-    return A;
+    let a = primary();
+    while (is('!')) { take(); a = { k: 'fn', f: 'fact', a }; }
+    if (is('^')) { take(); return { k: 'pow', a, b: expo() }; }
+    return a;
   }
   // exponent bere i implicitní součin: e^iz = e^(iz), e^2z = e^(2z)
   function expo() {
     let a = unary();
-    while (is('imp')) { take(); const A = a, B = power(); a = z => cmul(A(z), B(z)); }
+    while (is('imp')) { take(); a = { k: 'mul', a, b: power() }; }
     return a;
   }
   function primary() {
     if (p >= T.length) throw new Error('Výraz končí příliš brzy.');
     const k = take();
-    if (k.t === 'num') { const v = k.v; return () => v; }
-    if (k.t === 'var') { if (k.v === 'z') return z => z; if (k.v === 'x') return z => [z[0], 0]; return z => [z[1], 0]; }
+    if (k.t === 'num') return { k: 'num', v: k.v, c: k.c };
+    if (k.t === 'var') return { k: 'var', v: k.v };
     if (k.t === 'func') {
-      const fn = FUNCS[k.v];
-      let A;
-      if (is('(')) { take(); A = cmp(); close(); }
-      else { if (p >= T.length) throw new Error(`Za ${k.v} chybí argument.`); A = power(); }
-      return z => fn(A(z));
+      let a;
+      if (is('(')) { take(); a = cmp(); close(); }
+      else { if (p >= T.length) throw new Error(`Za ${k.v} chybí argument.`); a = power(); }
+      return { k: 'fn', f: k.v, a };
     }
     // if(podmínka; a; b): kde podmínka neplatí, vrátí b, bez b tam funkce není definovaná
     if (k.t === 'if') {
       if (!is('(')) throw new Error('Za if patří závorka: if(podmínka; a; b).');
       take();
-      const Cnd = cmp();
-      if (!is(';')) throw new Error('V if chybí středník: if(podmínka; a; b).');
-      take();
-      const A = cmp();
-      let B = null;
-      if (is(';')) { take(); B = cmp(); }
+      const c = cmp(); semi('if');
+      const a = cmp();
+      let b = null;
+      if (is(';')) { take(); b = cmp(); }
       close();
-      return z => {
-        const c = Cnd(z)[0];
-        if (!isFinite(c)) return C_NAN;
-        return c !== 0 ? A(z) : B ? B(z) : C_NAN;
-      };
+      return { k: 'if', c, a, b };
     }
-    if (k.t === '(') { const A = cmp(); close(); return A; }
+    // sum(n; 0; inf; člen), int(t; 0; inf; integrand)
+    if (k.t === 'sum' || k.t === 'int') {
+      const ex = k.t === 'sum' ? 'sum(n; 0; inf; z^n)' : 'int(t; 0; inf; exp(-z t))';
+      if (!is('(')) throw new Error(`Za ${k.t} patří závorka: ${ex}.`);
+      take();
+      if (!is('var') || !BOUND.includes(T[p].v)) throw new Error(`V ${k.t} je první proměnná, třeba ${ex}.`);
+      const v = take().v; semi(k.t);
+      const lo = cmp(); semi(k.t);
+      const hi = cmp(); semi(k.t);
+      const a = cmp(); close();
+      return { k: k.t, v, lo, hi, a };
+    }
+    if (k.t === '(') { const a = cmp(); close(); return a; }
     throw new Error(`Na tomhle místě nečekám „${k.s}“.`);
   }
-  const f = cmp();
+  const r = cmp();
   if (p < T.length) throw new Error(`Na tomhle místě nečekám „${T[p].s}“.`);
+  return r;
+}
+
+// ---------- LaTeX z pole f(z) → strom ----------
+const TEX_FN = { sin: 'sin', cos: 'cos', tan: 'tan', cot: 'cot', sinh: 'sinh', cosh: 'cosh', tanh: 'tanh', exp: 'exp', log: 'log',
+  ln: 'ln', arg: 'arg', Re: 're', Im: 'im', Gamma: 'gamma', gamma: 'gamma' };
+const TEX_SYM = { pi: ['num', [Math.PI, 0], 'pi'], infty: ['num', [Infinity, 0], 'inf'], infin: ['num', [Infinity, 0], 'inf'],
+  cdot: ['*'], times: ['*'], lt: ['<'], gt: ['>'], le: ['<='], leq: ['<='], ge: ['>='], geq: ['>='], div: ['/'] };
+function tokenizeTex(src) {
+  const s = src.replace(/\\begin\{cases\}/g, '\u0001').replace(/\\end\{cases\}/g, '\u0002').replace(/\\\\/g, '\u0003')
+    .replace(/\\(left|right|bigl|bigr|Bigl|Bigr|big|Big)(?![a-zA-Z])/g, '').replace(/\\\{/g, '(').replace(/\\\}/g, ')')
+    .replace(/\\(?:[,;:! ]|quad|qquad)|~/g, ' ').replace(/\{,\}/g, '.')
+    .replace(/\\mathrm\{\s*d\s*\}|\\differentialD/g, 'd').replace(/\\mathrm\{\s*i\s*\}|\\imaginaryI/g, 'i')
+    .replace(/\\mathrm\{\s*e\s*\}|\\exponentialE/g, 'e').replace(/\\(?:operatorname|mathrm|mathit)\{(\w+)\}/g, '\\$1 ');
+  const raw = [];
+  let i = 0;
+  while (i < s.length) {
+    const ch = s[i], rest = s.slice(i), last = raw[raw.length - 1];
+    if (/\s/.test(ch)) { i++; continue; }
+    // exponent a index bez závorek berou jen jeden znak: z^23 = z²·3
+    if (/\d/.test(ch) && last && (last.t === '^' || last.t === '_')) { raw.push({ t: 'num', v: [+ch, 0], s: ch }); i++; continue; }
+    let m = /^(\d+(?:[.,]\d+)?|\.\d+)/.exec(rest);
+    if (m) { raw.push({ t: 'num', v: [parseFloat(m[0].replace(',', '.')), 0], s: m[0] }); i += m[0].length; continue; }
+    m = /^\\text\{([^}]*)\}/.exec(rest);
+    if (m) { raw.push({ t: 'text', v: m[1], s: m[1] }); i += m[0].length; continue; }
+    m = /^\\([a-zA-Z]+)/.exec(rest);
+    if (m) {
+      const c = m[1];
+      if (c === 'frac' || c === 'dfrac' || c === 'tfrac') raw.push({ t: 'frac', s: '\\frac' });
+      else if (c === 'sqrt' || c === 'sum' || c === 'int') raw.push({ t: c, s: '\\' + c });
+      else if (c === 'overline' || c === 'bar') raw.push({ t: 'conj', s: '\\' + c });
+      else if (TEX_FN[c]) raw.push({ t: 'func', v: TEX_FN[c], s: '\\' + c });
+      else if (TEX_SYM[c]) { const [t, v, cn] = TEX_SYM[c]; raw.push(v ? { t, v, c: cn, s: '\\' + c } : { t, s: '\\' + c }); }
+      else if (c === 'lbrace' || c === 'rbrace') raw.push({ t: c === 'lbrace' ? '(' : ')', s: c });
+      else if (c === 'placeholder') throw new Error('Doplň prázdné místo.');
+      else throw new Error(`Neznám \\${c}.`);
+      i += m[0].length; continue;
+    }
+    m = /^[a-zA-Z]+/.exec(rest);
+    if (m) { splitWord(m[0], raw, true); i += m[0].length; continue; }
+    const two = rest.slice(0, 2);
+    if (two === '<=' || two === '>=') { raw.push({ t: two, s: two }); i += 2; continue; }
+    if (ch === '\u0001' || ch === '\u0002' || ch === '\u0003') { raw.push({ t: { '\u0001': 'cases', '\u0002': 'endcases', '\u0003': 'row' }[ch], s: '' }); i++; continue; }
+    if (ch === '[' || ch === ']') { raw.push({ t: ch === '[' ? '[' : ']', s: ch }); i++; continue; }
+    if ('+-*/^_(){}|<>=;,!&'.includes(ch)) { raw.push({ t: ch === ',' ? ';' : ch, s: ch }); i++; continue; }
+    throw new Error(`Nečekaný znak „${ch}“.`);
+  }
+  return raw;
+}
+function parseTex(src) {
+  if (!src.trim()) throw new Error('Napiš funkci, třeba z^2.');
+  const T = tokenizeTex(src);
+  let p = 0, bars = 0;
+  const is = (...ts) => p < T.length && ts.includes(T[p].t);
+  const take = () => T[p++];
+  const need = (t, msg) => { if (!is(t)) throw new Error(msg); take(); };
+  // činitel může začít číslem, písmenem, příkazem nebo závorkou; | jen když zrovna nejsme uvnitř |…|
+  const starts = () => is('num', 'var', 'func', 'frac', 'sqrt', 'sum', 'int', 'conj', 'if', '(', '{', 'cases') || (is('|') && !bars);
+  function cmp() {
+    const a = add();
+    if (!is('<', '>', '<=', '>=')) return a;
+    const op = take().t;
+    return { k: 'cmp', op, a, b: add() };
+  }
+  function add() {
+    let a = mul();
+    while (is('+', '-')) { const op = take().t; a = { k: op === '+' ? 'add' : 'sub', a, b: mul() }; }
+    return a;
+  }
+  function mul() {
+    let a = unary();
+    for (;;) {
+      if (is('*', '/')) { const op = take().t; a = { k: op === '/' ? 'div' : 'mul', a, b: unary() }; }
+      else if (starts()) a = { k: 'mul', a, b: power() };
+      else return a;
+    }
+  }
+  function unary() {
+    if (is('-')) { take(); return { k: 'neg', a: unary() }; }
+    if (is('+')) { take(); return unary(); }
+    return power();
+  }
+  // skupina: {…} nebo jeden znak (exponent, mez, čitatel bez závorek)
+  function group() {
+    if (is('{')) {
+      take();
+      if (is('}')) throw new Error('Něco chybí, doplň prázdné místo.');
+      const a = cmp(); need('}', 'Chybí „}“.'); return a;
+    }
+    if (p >= T.length || is('}')) throw new Error('Něco chybí, doplň prázdné místo.');
+    return primary();
+  }
+  function power() {
+    let a = primary();
+    for (;;) {
+      if (is('!')) { take(); a = { k: 'fn', f: 'fact', a }; }
+      else if (is('^')) { take(); a = { k: 'pow', a, b: group() }; }
+      else if (is('_')) throw new Error('Indexy pod čarou neznám.');
+      else return a;
+    }
+  }
+  // argument funkce bez závorek: sin 2z = sin(2z), končí před další funkcí nebo operátorem
+  function fnArg() {
+    if (is('(')) { take(); const a = cmp(); need(')', 'Chybí „)“.'); return a; }
+    let a = power();
+    while (is('num', 'var') || (is('{'))) a = { k: 'mul', a, b: power() };
+    return a;
+  }
+  // meze u sumy a integrálu: _{n=0}^{∞} v libovolném pořadí
+  function limits(sum) {
+    let lo = null, hi = null, v = null;
+    for (let r = 0; r < 2; r++) {
+      if (is('_')) {
+        take();
+        if (is('{')) {
+          take();
+          if (sum) {
+            if (!is('var') || !BOUND.includes(T[p].v)) throw new Error('Pod sumu patří proměnná, třeba n = 0.');
+            v = take().v; need('=', 'Pod sumu patří n = začátek.');
+          }
+          lo = cmp(); need('}', 'Chybí „}“.');
+        } else if (sum) throw new Error('Pod sumu patří proměnná, třeba n = 0.');
+        else lo = group();
+      } else if (is('^')) { take(); hi = group(); }
+    }
+    if (!lo || !hi) throw new Error(sum ? 'Suma potřebuje obě meze, třeba n = 0 a ∞.' : 'Integrál potřebuje obě meze.');
+    return { lo, hi, v };
+  }
+  function primary() {
+    if (p >= T.length) throw new Error('Výraz končí příliš brzy.');
+    const k = take();
+    if (k.t === 'num') return { k: 'num', v: k.v, c: k.c };
+    if (k.t === 'var') return { k: 'var', v: k.v };
+    if (k.t === '(' || k.t === '{') { const a = cmp(); need(k.t === '(' ? ')' : '}', `Chybí „${k.t === '(' ? ')' : '}'}“.`); return a; }
+    if (k.t === '[') { const a = cmp(); need(']', 'Chybí „]“.'); return a; }
+    if (k.t === '|') { bars++; const a = cmp(); bars--; need('|', 'Chybí zavírací |.'); return { k: 'fn', f: 'abs', a }; }
+    if (k.t === 'frac') { const a = group(), b = group(); return { k: 'div', a, b }; }
+    if (k.t === 'sqrt') {
+      if (is('[')) { take(); const n = cmp(); need(']', 'Chybí „]“.'); const a = group(); return { k: 'pow', a, b: { k: 'div', a: { k: 'num', v: [1, 0] }, b: n } }; }
+      return { k: 'fn', f: 'sqrt', a: group() };
+    }
+    if (k.t === 'conj') return { k: 'fn', f: 'conj', a: group() };
+    if (k.t === 'func') {
+      // sin^2 z = (sin z)^2
+      if (is('^')) { take(); const e = group(); return { k: 'pow', a: { k: 'fn', f: k.v, a: fnArg() }, b: e }; }
+      return { k: 'fn', f: k.v, a: fnArg() };
+    }
+    if (k.t === 'sum') { const { lo, hi, v } = limits(true); return { k: 'sum', v, lo, hi, a: mul() }; }
+    if (k.t === 'int') {
+      const { lo, hi } = limits(false), a = add();
+      if (!is('d')) throw new Error('Integrál končí dt (nebo ds, du …).');
+      return { k: 'int', v: take().v, lo, hi, a };
+    }
+    if (k.t === 'cases') {
+      const rows = [];
+      for (;;) {
+        const a = cmp();
+        let c = null;
+        if (is('&')) { take(); if (is('text')) take(); else c = cmp(); }
+        rows.push([a, c]);
+        if (is('row')) { take(); continue; }
+        need('endcases', 'Neuzavřené větvení.');
+        break;
+      }
+      let r = null;
+      for (let j = rows.length - 1; j >= 0; j--) {
+        const [a, c] = rows[j];
+        r = c ? { k: 'if', c, a, b: r } : a;
+      }
+      return r;
+    }
+    if (k.t === 'if') {
+      need('(', 'Za if patří závorka: if(podmínka; a; b).');
+      const c = cmp(); need(';', 'V if chybí středník.');
+      const a = cmp();
+      let b = null;
+      if (is(';')) { take(); b = cmp(); }
+      need(')', 'Chybí „)“.');
+      return { k: 'if', c, a, b };
+    }
+    if (k.t === 'd') throw new Error(`${k.s} patří na konec integrálu.`);
+    throw new Error(`Na tomhle místě nečekám „${k.s}“.`);
+  }
+  const r = cmp();
+  if (p < T.length) throw new Error(`Na tomhle místě nečekám „${T[p].s}“.`);
+  return r;
+}
+
+// ---------- strom → text a LaTeX ----------
+const PREC = { cmp: 0, if: 6, add: 1, sub: 1, mul: 2, div: 2, neg: 3, pow: 4, fn: 6, num: 6, var: 6, sum: 2, int: 2 };
+function numText(v) {
+  const s = String(+v.toPrecision(15));
+  return s.includes('e') ? v.toFixed(20).replace(/\.?0+$/, '') : s;
+}
+function toText(n) {
+  const w = (m, pr) => PREC[m.k] < pr || (m.k === 'num' && m.v[0] < 0) ? `(${toText(m)})` : toText(m);
+  switch (n.k) {
+    case 'num': return n.c || numText(n.v[0]);
+    case 'var': return n.v;
+    case 'neg': return '-' + w(n.a, 3);
+    case 'add': return `${w(n.a, 1)}+${w(n.b, 1)}`;
+    case 'sub': return `${w(n.a, 1)}-${w(n.b, 2)}`;
+    case 'mul': return `${w(n.a, 2)}*${w(n.b, 3)}`;
+    case 'div': return `${w(n.a, 2)}/${w(n.b, 3)}`;
+    case 'pow':
+      if (n.a.k === 'num' && n.a.c === 'e') return `exp(${toText(n.b)})`;   // e^z a exp(z) je totéž
+      return `${w(n.a, 5)}^${n.b.k === 'num' || n.b.k === 'var' ? toText(n.b) : `(${toText(n.b)})`}`;
+    case 'fn': return n.f === 'fact' ? `${w(n.a, 5)}!` : `${n.f}(${toText(n.a)})`;
+    case 'cmp': return `${w(n.a, 1)}${n.op}${w(n.b, 1)}`;
+    case 'if': return `if(${toText(n.c)};${toText(n.a)}${n.b ? ';' + toText(n.b) : ''})`;
+    default: return `${n.k}(${n.v};${toText(n.lo)};${toText(n.hi)};${toText(n.a)})`;
+  }
+}
+const TEX_NAME = { sin: '\\sin', cos: '\\cos', tan: '\\tan', cot: '\\cot', sinh: '\\sinh', cosh: '\\cosh', tanh: '\\tanh', log: '\\log',
+  ln: '\\ln', arg: '\\arg', re: '\\operatorname{Re}', im: '\\operatorname{Im}', gamma: '\\Gamma' };
+function toTex(n) {
+  const par = s => `\\left(${s}\\right)`;
+  const w = (m, pr) => PREC[m.k] < pr || (m.k === 'fn' && (m.f === 'exp' || m.f === 'fact') && pr >= 5) ? par(toTex(m)) : toTex(m);
+  // levý okraj výrazu: číslo za číslem potřebuje znak násobení
+  const leftNum = m => m.k === 'num' && !m.c ? true : ['pow', 'mul', 'div'].includes(m.k) && m.k !== 'div' ? leftNum(m.a) : false;
+  switch (n.k) {
+    case 'num': return n.c ? { i: 'i', e: 'e', pi: '\\pi', inf: '\\infty' }[n.c] : numText(n.v[0]).replace('.', '{,}');
+    case 'var': return n.v;
+    case 'neg': return '-' + w(n.a, 3);
+    case 'add': return `${w(n.a, 1)}+${w(n.b, 1)}`;
+    case 'sub': return `${w(n.a, 1)}-${w(n.b, 2)}`;
+    case 'mul': {
+      const b = n.b.k === 'neg' ? par(toTex(n.b)) : w(n.b, 2);
+      return `${w(n.a, 2)}${leftNum(n.b) || n.b.k === 'div' ? '\\cdot ' : ' '}${b}`;
+    }
+    case 'div': return `\\frac{${toTex(n.a)}}{${toTex(n.b)}}`;
+    case 'pow': return `${w(n.a, 5)}^{${toTex(n.b)}}`;
+    case 'fn':
+      if (n.f === 'exp') return `e^{${toTex(n.a)}}`;
+      if (n.f === 'sqrt') return `\\sqrt{${toTex(n.a)}}`;
+      if (n.f === 'abs') return `\\left|${toTex(n.a)}\\right|`;
+      if (n.f === 'conj') return `\\overline{${toTex(n.a)}}`;
+      if (n.f === 'fact') return `${w(n.a, 5)}!`;
+      return `${TEX_NAME[n.f]}${par(toTex(n.a))}`;
+    case 'cmp': return `${w(n.a, 1)}${{ '<': '<', '>': '>', '<=': '\\le ', '>=': '\\ge ' }[n.op]}${w(n.b, 1)}`;
+    case 'if': return `\\begin{cases}${toTex(n.a)} & ${toTex(n.c)}${n.b ? `\\\\ ${toTex(n.b)} & \\text{jinak}` : ''}\\end{cases}`;
+    case 'sum': return `\\sum_{${n.v}=${toTex(n.lo)}}^{${toTex(n.hi)}}${PREC[n.a.k] < 2 ? par(toTex(n.a)) : toTex(n.a)}`;
+    default: return `\\int_{${toTex(n.lo)}}^{${toTex(n.hi)}}${n.a.k === 'cmp' ? par(toTex(n.a)) : toTex(n.a)}\\,d${n.v}`;
+  }
+}
+const texOf = src => toTex(parseText(src));
+const textOfTex = tex => toText(parseTex(tex));
+
+// ---------- strom → funkce z ↦ f(z) ----------
+// Σ s nekonečnou mezí sčítá, dokud členy nespadnou pod 1e-12 součtu. Když členy přestanou klesat, nebo jich je přes
+// SUM_MAX, řada se bere jako divergentní a funkce tam není definovaná (graf tak sám ukáže oblast konvergence).
+const SUM_MAX = 3000;
+function csum(A, slot, z, lo, hi) {
+  if (!Number.isFinite(lo[0]) || Number.isNaN(hi[0])) return C_NAN;
+  const n0 = Math.ceil(lo[0] - 1e-9);
+  let sr = 0, si = 0;
+  if (hi[0] !== Infinity) {
+    const n1 = Math.floor(hi[0] + 1e-9);
+    if (n1 - n0 > 1e5) return C_NAN;
+    for (let n = n0; n <= n1; n++) { slot.v = [n, 0]; const t = A(z); sr += t[0]; si += t[1]; }
+    return Number.isFinite(sr) && Number.isFinite(si) ? [sr, si] : C_NAN;
+  }
+  let small = 0, check = 64, atCheck = Infinity;
+  for (let k = 0; k <= SUM_MAX; k++) {
+    slot.v = [n0 + k, 0];
+    const t = A(z);
+    if (!(Number.isFinite(t[0]) && Number.isFinite(t[1]))) return C_NAN;
+    sr += t[0]; si += t[1];
+    const m = Math.hypot(t[0], t[1]), S = Math.hypot(sr, si);
+    if (S > 1e15) return C_NAN;
+    if (m <= 1e-12 * (1 + S)) { if (++small >= 3 && k >= 10) return [sr, si]; } else small = 0;
+    if (k === check) { if (m >= 0.999 * atCheck && m > 1e-12 * (1 + S)) return C_NAN; atCheck = m; check *= 2; }
+  }
+  return C_NAN;
+}
+// ∫ dvojitě exponenciální kvadraturou: tanh-sinh na úsečce lo → hi (meze můžou být komplexní), exp-sinh k ±∞,
+// sinh-sinh přes celou osu. Zvládne singularity na krajích. Lichoběžníky s krokem h, h se půlí, dokud se hodnota
+// neustálí; když příspěvky na krajích nezmizí nebo se hodnota neustálí, integrál diverguje (NaN).
+function cint(A, slot, z, lo, hi) {
+  if (Number.isNaN(lo[0]) || Number.isNaN(hi[0])) return C_NAN;
+  const PI2 = Math.PI / 2, a = lo, b = hi;
+  const fin = v => Number.isFinite(v[0]) && Number.isFinite(v[1]);
+  let map, sign = 1;
+  if (fin(a) && fin(b)) {
+    const d = csub(b, a);
+    map = u => {
+      const x = PI2 * Math.sinh(u), s = 1 / (1 + Math.exp(-2 * x)), sc = 1 / (1 + Math.exp(2 * x));
+      if (s === 0 || sc === 0) return null;
+      const t = s < 0.5 ? cadd(a, [d[0] * s, d[1] * s]) : csub(b, [d[0] * sc, d[1] * sc]), g = Math.PI * Math.cosh(u) * s * sc;
+      return [t, [d[0] * g, d[1] * g]];
+    };
+  } else if (a[0] === -Infinity && b[0] === Infinity || a[0] === Infinity && b[0] === -Infinity) {
+    if (a[0] === Infinity) sign = -1;
+    map = u => {
+      const x = PI2 * Math.sinh(u), t = Math.sinh(x), g = Math.cosh(x) * PI2 * Math.cosh(u);
+      return Number.isFinite(t) && Number.isFinite(g) ? [[t, 0], [g, 0]] : null;
+    };
+  } else {
+    // jedna mez nekonečná: od konečné meze c do +∞ nebo −∞
+    const c = fin(a) ? a : b, inf = fin(a) ? b[0] : a[0], dir = inf > 0 ? 1 : -1;
+    if (!fin(c)) return C_NAN;
+    if (!fin(a)) sign = -1;
+    map = u => {
+      const ex = Math.exp(PI2 * Math.sinh(u)), g = ex * PI2 * Math.cosh(u);
+      return ex > 0 && Number.isFinite(g) ? [[c[0] + dir * ex, c[1]], [dir * g, 0]] : null;
+    };
+  }
+  const term = u => {
+    const m = map(u);
+    if (!m) return null;
+    slot.v = m[0];
+    const v = A(z), g = m[1];
+    return [v[0] * g[0] - v[1] * g[1], v[0] * g[1] + v[1] * g[0]];
+  };
+  const UMAX = 6.5;
+  let h = 0.5, sr = 0, si = 0;
+  const t0 = term(0);
+  if (!t0 || !fin(t0)) return C_NAN;
+  sr = t0[0]; si = t0[1];
+  let ulo = 0, uhi = 0;
+  for (const dir of [1, -1]) {
+    let small = 0, k = 1;
+    for (; ; k++) {
+      const u = dir * k * h;
+      if (Math.abs(u) > UMAX) return C_NAN;
+      const v = term(u);
+      if (!v) { if (small) break; return C_NAN; }
+      if (!fin(v)) return C_NAN;
+      sr += v[0]; si += v[1];
+      if (Math.hypot(v[0], v[1]) <= 1e-15 * (1 + Math.hypot(sr, si))) { if (++small >= 2) break; } else small = 0;
+    }
+    if (dir > 0) uhi = k * h; else ulo = -k * h;
+  }
+  let I = [sr * h, si * h];
+  for (let lev = 1; lev <= 6; lev++) {
+    h /= 2;
+    for (let u = ulo + h; u < uhi; u += 2 * h) {
+      const v = term(u);
+      if (!v) continue;
+      if (!fin(v)) return C_NAN;
+      sr += v[0]; si += v[1];
+    }
+    const J = [sr * h, si * h], err = Math.hypot(J[0] - I[0], J[1] - I[1]);
+    I = J;
+    // chyba J je zhruba druhá mocnina rozdílu mezi úrovněmi, takže 1e-6 stačí na přesnost kolem 1e-12
+    if (lev >= 2 && err <= 1e-6 * (1 + Math.hypot(J[0], J[1]))) return sign < 0 ? [-J[0], -J[1]] : J;
+  }
+  return C_NAN;
+}
+function compileAst(root) {
+  const scope = new Map();   // vázaná proměnná → {v: hodnota}
+  function c(n) {
+    switch (n.k) {
+      case 'num': { const v = n.v; return () => v; }
+      case 'var': {
+        if (n.v === 'z') return z => z;
+        if (n.v === 'x') return z => [z[0], 0];
+        if (n.v === 'y') return z => [z[1], 0];
+        const slot = scope.get(n.v);
+        if (!slot) throw new Error(`${n.v} tu nic neváže, patří do sumy nebo integrálu.`);
+        return () => slot.v;
+      }
+      case 'neg': { const A = c(n.a); return z => { const v = A(z); return [-v[0], -v[1]]; }; }
+      case 'add': { const A = c(n.a), B = c(n.b); return z => cadd(A(z), B(z)); }
+      case 'sub': { const A = c(n.a), B = c(n.b); return z => csub(A(z), B(z)); }
+      case 'mul': { const A = c(n.a), B = c(n.b); return z => cmul(A(z), B(z)); }
+      case 'div': { const A = c(n.a), B = c(n.b); return z => cdiv(A(z), B(z)); }
+      case 'pow': { const A = c(n.a), B = c(n.b); return z => cpow(A(z), B(z)); }
+      case 'fn': { const fn = FUNCS[n.f], A = c(n.a); return z => fn(A(z)); }
+      // porovnání reálných částí, výsledek 1 nebo 0 (pro if)
+      case 'cmp': {
+        const A = c(n.a), B = c(n.b), op = n.op;
+        return z => {
+          const a = A(z)[0], b = B(z)[0];
+          if (!(isFinite(a) && isFinite(b))) return C_NAN;
+          return (op === '<' ? a < b : op === '>' ? a > b : op === '<=' ? a <= b : a >= b) ? C_ONE : C_ZERO;
+        };
+      }
+      // kde podmínka neplatí, vrátí b, bez b tam funkce není definovaná
+      case 'if': {
+        const Cnd = c(n.c), A = c(n.a), B = n.b ? c(n.b) : null;
+        return z => {
+          const v = Cnd(z)[0];
+          if (!isFinite(v)) return C_NAN;
+          return v !== 0 ? A(z) : B ? B(z) : C_NAN;
+        };
+      }
+      default: {
+        const LO = c(n.lo), HI = c(n.hi), prev = scope.get(n.v), slot = { v: C_ZERO };
+        scope.set(n.v, slot);
+        const A = c(n.a);
+        if (prev) scope.set(n.v, prev); else scope.delete(n.v);
+        return n.k === 'sum' ? z => csum(A, slot, z, LO(z), HI(z)) : z => cint(A, slot, z, LO(z), HI(z));
+      }
+    }
+  }
+  return c(root);
+}
+function compile(src) {
+  const f = compileAst(parseText(src));
   const r = f([0.31, 0.27]);
   if (!Array.isArray(r) || r.length !== 2) throw new Error('Výraz nevrací komplexní číslo.');
   return f;
 }
+// stejný zápis jinými slovy (2z a 2*z, mezery) má stejný kanonický text
+const canonMemo = new Map();
+function norm(s) {
+  let r = canonMemo.get(s);
+  if (r === undefined) { try { r = toText(parseText(s)); } catch (e) { r = s.replace(/\s+/g, ''); } canonMemo.set(s, r); }
+  return r;
+}
+
+// ---------- pole f(z): MathLive píše zápis jako Desmos, bez něj zůstane textové pole ----------
+const ML = !!(window.MathfieldElement && window.MathLive);
+const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function texHtml(tex, fallback) {
+  if (ML) { try { return MathLive.convertLatexToMarkup(tex); } catch (e) { /* níž text */ } }
+  return esc(fallback);
+}
+const SHORTCUTS = {
+  pi: '\\pi', oo: '\\infty', inf: '\\infty', infty: '\\infty', sqrt: '\\sqrt{#0}', sum: '\\sum_{n=#?}^{#?}', int: '\\int_{#?}^{#?}',
+  sin: '\\sin', cos: '\\cos', tan: '\\tan', cot: '\\cot', sinh: '\\sinh', cosh: '\\cosh', tanh: '\\tanh', exp: '\\exp', log: '\\log',
+  ln: '\\ln', arg: '\\arg', Re: '\\operatorname{Re}', Im: '\\operatorname{Im}', gamma: '\\Gamma', Gamma: '\\Gamma',
+  conj: '\\overline{#0}', abs: '\\left|#0\\right|', '<=': '\\le', '>=': '\\ge',
+};
+const fnEl = (() => {
+  const el = $('#fn');
+  if (ML) {
+    MathfieldElement.soundsDirectory = null;
+    el.smartFence = true;
+    el.mathVirtualKeyboardPolicy = 'auto';
+    el.inlineShortcuts = SHORTCUTS;
+    return el;
+  }
+  const inp = document.createElement('input');
+  Object.assign(inp, { id: 'fn', type: 'text', spellcheck: false, autocomplete: 'off', value: 'z^2' });
+  el.replaceWith(inp);
+  return inp;
+})();
+// do pole jde text grafu (z^2, sum(n; 0; inf; z^n)) přeložený do LaTeXu, z pole zpátky text
+function setField(src) { try { fnEl.value = ML ? texOf(src) : src; } catch (e) { fnEl.value = src; } }
+const readField = () => ML ? textOfTex(fnEl.value) : fnEl.value;
 
 // ---------- stav ----------
 const K = 6;              // jemnost šachovnice na hranu buňky
@@ -639,14 +1115,18 @@ function gridCounts(g) {
 
 function computeLattice() {
   const g = state.grid, P = gridParam(g), [nu, nv] = gridCounts(g);
-  const NU = nu * K + 1, NV = nv * K + 1, N = NU * NV;
+  const NU = nu * K + 1, NV = nv * K + 1, N = NU * NV, t0 = performance.now();
   const zx = new Float64Array(N), zy = new Float64Array(N), fx = new Float64Array(N), fy = new Float64Array(N);
   for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
     const q = P(i / (NU - 1), j / (NV - 1)), w = F(q[0], q[1]), k = i * NV + j;
     zx[k] = q[0]; zy[k] = q[1]; fx[k] = w[0]; fy[k] = w[1];
   }
   state.lattice = { nu, nv, NU, NV, zx, zy, fx, fy, sx: new Float32Array(N), sy: new Float32Array(N), ok: new Uint8Array(N) };
+  state.fnCost = (performance.now() - t0) / N;
 }
+// drahá funkce (sumy, integrály: víc než 3 µs na bod) dostane hrubší rastr hranice a méně kroků bisekce
+const costly = () => state.fnCost > 0.003;
+const rasterW = () => costly() ? 120 : 240;
 
 function quantBox(xs, ys, q) {
   if (xs.length < 2) return null;
@@ -708,7 +1188,7 @@ function samplePath(P, N0, G, scale) {
       if (jump) { const pm = P((sa + sb) / 2); zs.push(pm[0], pm[1]); fs.push(NaN, NaN); }
       return;
     }
-    if (!fin && d >= 5) return;
+    if (!fin && d >= (costly() ? 3 : 5)) return;
     const sm = (sa + sb) / 2, pm = P(sm), fm = ev(pm[0], pm[1]);
     rec(sa, fa, sm, fm, d + 1);
     zs.push(pm[0], pm[1]); fs.push(fm[0], fm[1]);
@@ -1232,7 +1712,7 @@ function frame() {
     const then = state.ext.thenSrc;
     if (state.ext.dir > 0) tourNote('extDone');
     finishExtension();
-    if (then) { $('#fn').value = then; applyFunction(then, false, true); }
+    if (then) { setField(then); applyFunction(then, false, true); }
     requestDraw();
   }
   updateInfo();
@@ -1367,7 +1847,7 @@ function applyFunction(src, quiet, keepT) {
   let f;
   try { f = compile(src); }
   catch (e) {
-    if (!quiet) { $('#fnErr').textContent = e.message; $('#fnErr').hidden = false; $('#fnRow').classList.add('bad'); }
+    if (!quiet) showFnErr(e.message);
     return false;
   }
   FN = f; state.fsrc = src.trim();
@@ -1379,6 +1859,7 @@ function applyFunction(src, quiet, keepT) {
   return true;
 }
 
+function showFnErr(msg) { $('#fnErr').textContent = msg; $('#fnErr').hidden = false; $('#fnRow').classList.add('bad'); }
 function setGrid(patch, refit) {
   Object.assign(state.grid, patch);
   syncGridUI(); recomputeAll(); if (refit) fitLeft();
@@ -1428,7 +1909,7 @@ const SCENES = [
 function loadScene(sc) {
   pause();
   try { FN = compile(sc.f); state.fsrc = sc.f; } catch (e) { FN = compile('z^2'); state.fsrc = 'z^2'; }
-  $('#fn').value = state.fsrc; $('#fnErr').hidden = true; $('#fnRow').classList.remove('bad');
+  setField(state.fsrc); $('#fnErr').hidden = true; $('#fnRow').classList.remove('bad');
   state.grid = { ...sc.grid };
   computeLattice(); computeTol();
   colorCounter = 0;
@@ -1445,23 +1926,23 @@ function loadScene(sc) {
 // ---------- analytické rozšíření ----------
 // f je zadaná jen na části roviny (nebo tam jen holomorfní), ext je její jediné holomorfní rozšíření
 const EXTENSIONS = [
-  { label: 'Σ z<sup>n</sup>', dom: '|z| < 1', extLabel: '1/(1 − z)',
+  { label: 'Σ z<sup>n</sup>', tex: '\\sum_{n=0}^{\\infty} z^n', dom: '|z| < 1', extLabel: '1/(1 − z)',
     note: 'Řada konverguje jen pro |z| < 1 a tam se rovná 1/(1 − z). Rozšíření má jediný pól v z = 1.',
     f: 'if(abs(z) < 1; 1/(1-z))', ext: '1/(1-z)',
     region: { x0: -2.1, x1: 2.1, y0: -2.1, y1: 2.1 }, curves: [{ kind: 'circle', c: [-0.6, 0.4], r: 0.7 }] },
-  { label: 'Σ (−1)<sup>n</sup> z<sup>2n</sup>', dom: '|z| < 1', extLabel: '1/(1 + z²)',
+  { label: 'Σ (−1)<sup>n</sup> z<sup>2n</sup>', tex: '\\sum_{n=0}^{\\infty} (-1)^n z^{2n}', dom: '|z| < 1', extLabel: '1/(1 + z²)',
     note: 'Řada konverguje jen pro |z| < 1, i když 1/(1 + x²) je na reálné ose všude hladká. Dál ji nepustí póly ±i.',
     f: 'if(abs(z) < 1; 1/(1+z^2))', ext: '1/(1+z^2)',
     region: { x0: -2.1, x1: 2.1, y0: -2.1, y1: 2.1 }, curves: [{ kind: 'line', a: [-1.8, -0.5], b: [1.8, 0.7] }] },
-  { label: '∫<sub>0</sub><sup>∞</sup> e<sup>−zt</sup> dt', dom: 'Re z > 0', extLabel: '1/z',
+  { label: '∫<sub>0</sub><sup>∞</sup> e<sup>−zt</sup> dt', tex: '\\int_0^{\\infty} e^{-zt}\\,dt', dom: 'Re z > 0', extLabel: '1/z',
     note: 'Integrál konverguje jen pro Re z > 0 a vyjde 1/z. Rozšíření 1/z žije na celé rovině kromě nuly.',
     f: 'if(re(z) > 0; 1/z)', ext: '1/z',
     region: { x0: -2, x1: 2, y0: -2, y1: 2 }, curves: [{ kind: 'circle', c: [0.3, 0.2], r: 0.8 }] },
-  { label: 'Γ(z) = ∫<sub>0</sub><sup>∞</sup> t<sup>z−1</sup> e<sup>−t</sup> dt', dom: 'Re z > 0', extLabel: 'Γ(z)',
+  { label: 'Γ(z) = ∫<sub>0</sub><sup>∞</sup> t<sup>z−1</sup> e<sup>−t</sup> dt', tex: '\\Gamma(z)=\\int_0^{\\infty} t^{z-1}e^{-t}\\,dt', dom: 'Re z > 0', extLabel: 'Γ(z)',
     note: 'Integrál konverguje jen pro Re z > 0. Rozšíření je Γ na celé rovině s póly v 0, −1, −2, …',
     f: 'if(re(z) > 0; gamma(z))', ext: 'gamma(z)',
     region: { x0: -3.5, x1: 3.5, y0: -1.5, y1: 1.5 }, curves: [{ kind: 'line', a: [-3.2, 0.6], b: [3.2, 0.9] }] },
-  { label: 'z<sup>2</sup> v kruhu, (z/|z|)<sup>2</sup> venku', dom: '|z| < 1', extLabel: 'z²',
+  { label: 'z<sup>2</sup> v kruhu, (z/|z|)<sup>2</sup> venku', tex: 'z^2\\text{ v kruhu, }\\left(\\frac{z}{|z|}\\right)^2\\text{ venku}', dom: '|z| < 1', extLabel: 'z²',
     note: 'Venku funkce není holomorfní, kruh z |z| > 1 slisuje na jednotkovou kružnici. V kruhu se shoduje se z², takže jediné holomorfní rozšíření je z².',
     f: 'if(abs(z) < 1; z^2; (z/abs(z))^2)', ext: 'z^2', holo: 'abs(z) < 1',
     region: { x0: -2, x1: 2, y0: -2, y1: 2 }, curves: [{ kind: 'circle', c: [0.5, 0.3], r: 0.9 }] },
@@ -1478,7 +1959,10 @@ function syncExtUI() {
   document.querySelectorAll('.ext-item').forEach((b, i) => b.classList.toggle('on', i === state.extIdx));
   const btn = $('#extBtn');
   btn.disabled = !ex;
-  btn.textContent = !ex ? 'Rozšířit' : norm(state.fsrc) === norm(ex.ext) ? 'Vrátit původní' : `Rozšířit na ${ex.extLabel}`;
+  btn.innerHTML = !ex ? 'Rozšířit' : norm(state.fsrc) === norm(ex.ext) ? 'Vrátit původní' : `Rozšířit na ${texHtml(texOf(ex.ext), ex.extLabel)}`;
+  let fx = state.fsrc;
+  try { fx = texOf(state.fsrc); } catch (e) { /* zůstane text */ }
+  $('#extFn').innerHTML = texHtml(fx, state.fsrc);
   $('#extNote').textContent = ex ? ex.note : 'Vyber příklad. Funkce je zadaná jen na části roviny nebo tam není holomorfní.';
 }
 // oblast, kterou obtáhne přerušovaná hranice: kde je původní funkce definovaná, u příkladu s holo kde je holomorfní
@@ -1508,7 +1992,7 @@ function edt1d(f, n, h) {
   return d;
 }
 function growthField(dom) {
-  const g = state.grid, RW = 240, RH = Math.max(40, Math.min(480, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
+  const g = state.grid, RW = rasterW(), RH = Math.max(RW / 6 | 0, Math.min(2 * RW, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
   const cw = (g.x1 - g.x0) / RW, ch = (g.y1 - g.y0) / RH, BIG = 1e20, INF = 1e9, D = new Float64Array(RW * RH);
   let any = false;
   for (let j = 0; j < RH; j++) for (let i = 0; i < RW; i++) {
@@ -1595,8 +2079,9 @@ function edgePieces(lines, mapFn, coarse = 1) {
   const scale = (fa, fb) => coarse * Math.max(1, Math.hypot(fa[0] - cx, fa[1] - cy) / R, Math.hypot(fb[0] - cx, fb[1] - cy) / R);
   const near = p => { const w = mapFn(p); return isFinite(w[0]) && isFinite(w[1]) && Math.hypot(w[0] - cx, w[1] - cy) < far; };
   // pól mezi dvěma uzly: oba konce mají obraz blízko, ale někde mezi nimi obraz uteče
+  const CH = costly() ? 3 : 8;
   const chordNear = (a, b) => {
-    for (let k = 1; k < 8; k++) if (!near([a[0] + (b[0] - a[0]) * k / 8, a[1] + (b[1] - a[1]) * k / 8])) return false;
+    for (let k = 1; k < CH; k++) if (!near([a[0] + (b[0] - a[0]) * k / CH, a[1] + (b[1] - a[1]) * k / CH])) return false;
     return true;
   };
   for (const line of lines) {
@@ -1622,22 +2107,22 @@ function edgePieces(lines, mapFn, coarse = 1) {
   }
   return out;
 }
-// přesná hranice oblasti, kde je dom definovaná: rastr 240 uzlů napříč a bisekce na každé hraně
+// přesná hranice oblasti, kde je dom definovaná: rastr 240 uzlů napříč (u drahé funkce 120) a bisekce na každé hraně
 function domainEdge(dom, mapFn) {
-  const g = state.grid, RW = 240, RH = Math.max(40, Math.min(480, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
+  const g = state.grid, RW = rasterW(), RH = Math.max(RW / 6 | 0, Math.min(2 * RW, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
   const ok = z => { const w = dom(z); return isFinite(w[0]) && isFinite(w[1]); };
   const inside = new Uint8Array(RW * RH);
   for (let k = 0; k < inside.length; k++) inside[k] = ok(nodeXY(g, RW, RH, k)) ? 1 : 0;
   const lines = contourLines(RW, RH, inside, (a, b) => {
     let p = nodeXY(g, RW, RH, a), q = nodeXY(g, RW, RH, b);
     if (!inside[a]) [p, q] = [q, p];   // p uvnitř, q venku
-    for (let it = 0; it < 24; it++) {
+    for (let it = 0, n = costly() ? 5 : 14; it < n; it++) {
       const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
       if (ok(m)) p = m; else q = m;
     }
     return p;
   });
-  return edgePieces(lines, mapFn);
+  return edgePieces(lines, mapFn, costly() ? 4 : 1);
 }
 // hranice dorostlého gridu během rozšíření: vrstevnice vzdálenosti od oblasti konvergence. Počítá se v každém snímku
 // a hýbe se, proto s tolerancí jako bez přiblížení (zjemnění po zoomu roviny w by animaci zpomalilo)
@@ -1715,7 +2200,7 @@ function extend() {
   pause(); finishExtension();
   const dom = compile(ex.f), edgeDom = extDomain(ex), fromBox = state.imgBox && { ...state.imgBox };
   if (norm(state.fsrc) !== norm(ex.ext)) {
-    $('#fn').value = ex.ext;
+    setField(ex.ext);
     applyFunction(ex.ext, false, true);
     startGrowth(dom, +1, fromBox, state.imgBox && { ...state.imgBox }, null, edgeDom);
   } else {
@@ -1993,12 +2478,11 @@ cR.style.cursor = 'grab';
 // ---------- ovládací prvky ----------
 const CHIPS = [['z²', 'z^2'], ['z³', 'z^3'], ['eᶻ', 'exp(z)'], ['1/z', '1/z'], ['sin z', 'sin(z)'], ['(z−i)/(z+i)', '(z-i)/(z+i)'], ['z + 1/z', 'z+1/z'], ['log z', 'log(z)'], ['√z', 'sqrt(z)']];
 const CHIPS_BAD = [['z̄', 'conj(z)'], ['x + 2iy', 'x + 2i y'], ['z·|z|', 'z*abs(z)']];
-const norm = s => s.replace(/\s+/g, '');
 function buildChips(el, list) {
   for (const [lab, expr] of list) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = lab; b.dataset.expr = expr;
-    b.addEventListener('click', () => { $('#fn').value = expr; applyFunction(expr); });
+    b.addEventListener('click', () => { setField(expr); applyFunction(expr); });
     el.appendChild(b);
   }
 }
@@ -2007,7 +2491,7 @@ buildChips($('#chips'), CHIPS); buildChips($('#chipsBad'), CHIPS_BAD);
 EXTENSIONS.forEach((ex, i) => {
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'ext-item';
-  b.innerHTML = `<span class="m">${ex.label}</span><span class="d">${ex.dom}</span>`;
+  b.innerHTML = `<span class="m">${ML ? texHtml(ex.tex, '') : ex.label}</span><span class="d">${ex.dom}</span>`;
   b.addEventListener('click', () => loadExtension(i));
   $('#extList').appendChild(b);
 });
@@ -2017,13 +2501,33 @@ const sceneSel = $('#scene');
 sceneSel.innerHTML = '<option value="">Vyber ukázku…</option>' + SCENES.map((s, i) => `<option value="${i}">${s.name}</option>`).join('');
 sceneSel.addEventListener('change', () => { if (sceneSel.value !== '') loadScene(SCENES[+sceneSel.value]); sceneSel.value = ''; });
 
+// psaní do pole: funkce se použije chvíli po posledním znaku, Enter ji použije hned a pustí animaci
 let fnTimer = 0;
-$('#fn').addEventListener('input', e => { clearTimeout(fnTimer); fnTimer = setTimeout(() => applyFunction(e.target.value), 450); });
-$('#fn').addEventListener('keydown', e => {
-  if (e.key !== 'Enter') return;
+function fieldFn() { try { return readField(); } catch (e) { showFnErr(e.message); return null; } }
+function applyHeavy(src, then) {
+  if (!/\b(sum|int)\(/.test(norm(src))) { if (applyFunction(src) && then) then(); return; }
+  $('#fnBusy').hidden = false;
+  requestAnimationFrame(() => setTimeout(() => { const ok = applyFunction(src); $('#fnBusy').hidden = true; if (ok && then) then(); }, 0));
+}
+fnEl.addEventListener('input', () => {
   clearTimeout(fnTimer);
-  if (norm(e.target.value) !== norm(state.fsrc) ? applyFunction(e.target.value) : true) { pause(); setT(0); togglePlay(); }
+  fnTimer = setTimeout(() => { const src = fieldFn(); if (src !== null) applyHeavy(src); }, 450);
 });
+fnEl.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  clearTimeout(fnTimer);
+  const src = fieldFn();
+  const go = () => { pause(); setT(0); togglePlay(); };
+  if (src !== null) { if (norm(src) !== norm(state.fsrc)) applyHeavy(src, go); else go(); }
+});
+
+// záložky Funkce a Rozšíření přepínají horní část panelu, zbytek je společný
+function showTab(name) {
+  document.querySelectorAll('[data-pane]').forEach(el => { el.hidden = el.dataset.pane !== name; });
+  document.querySelectorAll('.tabs [data-tab]').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+}
+document.querySelectorAll('.tabs [data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
 $('#play').addEventListener('click', togglePlay);
 $('#rewind').addEventListener('click', () => { pause(); setT(0); });
@@ -2085,7 +2589,7 @@ document.addEventListener('pointerup', () => {
 });
 window.addEventListener('keydown', e => {
   const a = e.target, tag = a.tagName;
-  if ((tag === 'INPUT' && a.type !== 'range' && a.type !== 'checkbox') || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if ((tag === 'INPUT' && a.type !== 'range' && a.type !== 'checkbox') || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'MATH-FIELD') return;
   if (e.code === 'Space') { if (tag === 'BUTTON' || tag === 'INPUT') return; e.preventDefault(); togglePlay(); }
   else if (e.key === 'r' || e.key === 'R') { if (e.ctrlKey || e.metaKey) return; pause(); setT(0); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
@@ -2106,8 +2610,8 @@ const toolBtn = t => $(`#tools .tool[data-tool="${t}"]`);
 const TOUR = [
   { title: 'Dvě roviny', info: true, targets: () => [$('#cL').parentElement, $('#cR').parentElement],
     text: 'Vlevo je rovina z, tam si všechno připravíš. Vpravo je rovina w, kam se to přenese funkcí f. Vede mezi nimi cesta w = (1 − t)·z + t·f(z): při t = 0 jsou obě roviny stejné, při t = 1 vidíš f(z).' },
-  { title: 'Zadej funkci', targets: () => [$('#fnRow'), $('#chips')],
-    text: 'Funkci napíšeš do pole, nebo vybereš čip. Pole umí i x, y, i, exp, sin, log a mocniny.',
+  { title: 'Zadej funkci', targets: () => [$('#fnRow'), $('#chips')], setup: () => showTab('fn'),
+    text: 'Funkci píšeš jako v Desmosu: / udělá zlomek, ^ mocninu, sum sumu a int integrál. Nebo vyber čip.',
     task: 'Klikni na čip eᶻ, nebo napiš vlastní funkci a stiskni Enter.', done: b => more(b, 'fn') },
   { title: 'Pusť animaci', targets: () => [$('#play')],
     text: 'Animace přenese grid z roviny z do roviny w.',
@@ -2136,8 +2640,8 @@ const TOUR = [
   { title: 'Pohled', targets: () => [$('#cL').parentElement, $('#cR').parentElement],
     text: 'Kolečkem přibližuješ, pravým tlačítkem posouváš. Dvojklik mimo všechny objekty vrátí pohled roviny: v rovině w kamkoli, v rovině z mimo grid.',
     task: 'Přibliž kolečkem rovinu w a pak do ní dvojklikni.', done: b => more(b, 'zoom') && more(b, 'viewReset') },
-  { title: 'Analytické rozšíření', targets: () => [$('#extList')],
-    text: 'Některé funkce jsou zadané jen na části roviny, třeba řada, která konverguje jen v kruhu. Grid je pak jen tam, kde funkce konverguje, a přerušovaná čára ukazuje hranici.',
+  { title: 'Analytické rozšíření', targets: () => [$('#extList')], setup: () => showTab('ext'),
+    text: 'V záložce Rozšíření jsou funkce zadané jen na části roviny, třeba řada, která konverguje jen v kruhu. Grid je pak jen tam, kde funkce konverguje, a přerušovaná čára ukazuje hranici.',
     task: 'Vyber příklad Σ zⁿ.', done: b => more(b, 'extSel') },
   { title: 'Rozšířit', targets: () => [$('#extBtn')], setup: () => { pause(); if (state.t < 1) setT(1); },
     text: 'Rozšíření je jen jedno, proto na původní obraz navazuje bez švu. Grid doroste přes hranici do celé oblasti a vpravo se rovnou ukáže výsledek.',

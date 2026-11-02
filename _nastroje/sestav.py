@@ -1,7 +1,8 @@
 """Sestaví stránky ukázek ze zdrojů v _zdroje/ do <název>/index.html.
 
 Zdroj je stránka bez hlavičky dokumentu (stejný soubor jde publikovat i jako Artifact v Claude). Sestavení doplní
-doctype, popis a náhled odkazu pro sdílení, ikonky a místo Google Fonts vlastní písma z fonts/ (nic z cizích serverů).
+doctype, popis a náhled odkazu pro sdílení, ikonky, místo Google Fonts vlastní písma z fonts/ a místo CDN MathLive
+z knihovny/mathlive (nic z cizích serverů).
 Použití:  python _nastroje/sestav.py
 """
 import html, os, re
@@ -23,6 +24,8 @@ def build(slug, src, desc, image):
     # Google Fonts pryč, místo nich vlastní písma
     s = re.sub(r'<link rel="preconnect"[^>]*>\n?', "", s)
     s = re.sub(r'<link rel="stylesheet" href="https://fonts\.googleapis\.com[^>]*>', '<link rel="stylesheet" href="../fonts/fonts.css">', s)
+    # MathLive (pole f(z)) z knihovny/ místo CDN
+    s = re.sub(r"https://cdn\.jsdelivr\.net/npm/mathlive@[\d.]+/dist/", "../knihovny/mathlive/", s)
     e = html.escape
     head = f"""<!doctype html>
 <html lang="cs">
