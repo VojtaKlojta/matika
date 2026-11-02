@@ -1042,7 +1042,7 @@ const state = {
   curves: [], probes: [], inters: [], lines: [], lattice: null, history: [],
   tol: 0.01, tolBase: 0.01, tolFactor: 1, imgBox: null, holo: 'good',
   t: 0, u: 0, playing: false, dur: 2.6,
-  tool: 'free', selected: null, sel: new Set(), hover: null, showAngles: true, extIdx: null, ext: null,
+  tool: 'free', selected: null, sel: new Set(), hover: null, showAngles: true, extIdx: null, ext: null, cont: null, holoFr: 1,
   viewL: { cx: 0, cy: 0, s: 100 }, viewR: { cx: 0, cy: 0, s: 100 }, autoCam: true,
 };
 let nextId = 1, colorCounter = 0;
@@ -1345,7 +1345,7 @@ function checkHolo() {
     if (Math.abs(J[0] - J[3]) + Math.abs(J[1] + J[2]) <= 1e-5 * nrm + 1e-9) ok++;
   }
   const fr = tot ? ok / tot : 1, el = $('#holo'), partial = defined < 0.97 * all;
-  state.partial = partial;
+  state.partial = partial; state.holoFr = fr;
   state.holo = fr >= 0.95 ? (partial ? 'warn' : 'good') : fr <= 0.05 ? 'bad' : 'warn';
   el.className = 'badge ' + state.holo;
   el.textContent = fr >= 0.95 ? (partial ? 'Holomorfní tam, kde je definovaná. Na zbytku oblasti definovaná není.' : 'Holomorfní. Úhly drží všude, kde f′ ≠ 0.')
@@ -1402,8 +1402,9 @@ function showProgress(p) {
   bar.style.transform = `scaleX(${p})`;
   progressEl.setAttribute('aria-valuenow', Math.round(100 * p));
 }
-function jobDone() {
+function jobDone(async) {
   job = null; showProgress(null); requestDraw();
+  if (async) syncExtUI();   // tlačítko rozšíření čeká na hotovou funkci
   const cbs = afterJob; afterJob = [];
   if (cbs.length) setTimeout(() => cbs.forEach(cb => cb()), 0);
 }
@@ -1412,7 +1413,7 @@ function stepJob(gen) {
   const t0 = performance.now();
   let r;
   do r = gen.next(); while (!r.done && performance.now() - t0 < 30);
-  if (r.done) { jobDone(); return; }
+  if (r.done) { jobDone(true); return; }
   showProgress(r.value); requestDraw();
   setTimeout(() => stepJob(gen), 0);
 }
@@ -1425,7 +1426,7 @@ function recomputeAll() {
   setTimeout(() => stepJob(gen), 0);
 }
 // dopočítá rozpracovaný přepočet hned (rozšíření potřebuje hotové čáry)
-function finishJob() { if (job) { const gen = job; job = null; runJob(gen); jobDone(); } }
+function finishJob() { if (job) { const gen = job; job = null; runJob(gen); jobDone(true); } }
 // cb až bude přepočet hotový (Enter pustí animaci až s hotovým gridem)
 function whenIdle(cb) { if (job) afterJob.push(cb); else cb(); }
 
@@ -1924,7 +1925,7 @@ function applyFunction(src, quiet, keepT) {
     if (!quiet) showFnErr(e.message);
     return false;
   }
-  FN = f; state.fsrc = src.trim();
+  FN = f; state.fsrc = src.trim(); state.cont = null; contGen = null;
   $('#fnErr').hidden = true; $('#fnRow').classList.remove('bad');
   markChips();
   if (!keepT) { pause(); setT(0); }
@@ -1983,6 +1984,7 @@ const SCENES = [
 function loadScene(sc) {
   pause();
   try { FN = compile(sc.f); state.fsrc = sc.f; } catch (e) { FN = compile('z^2'); state.fsrc = 'z^2'; }
+  state.cont = null; contGen = null;
   setField(state.fsrc); $('#fnErr').hidden = true; $('#fnRow').classList.remove('bad');
   state.grid = { ...sc.grid };
   computeLattice(); computeTol();
@@ -2032,12 +2034,28 @@ function syncExtUI() {
   if (ex && norm(state.fsrc) !== norm(ex.f) && norm(state.fsrc) !== norm(ex.ext)) { state.extIdx = null; ex = null; }
   document.querySelectorAll('.ext-item').forEach((b, i) => b.classList.toggle('on', i === state.extIdx));
   const btn = $('#extBtn');
-  btn.disabled = !ex;
-  btn.innerHTML = !ex ? 'Rozšířit' : norm(state.fsrc) === norm(ex.ext) ? 'Vrátit původní' : `Rozšířit na ${texHtml(texOf(ex.ext), ex.extLabel)}`;
   let fx = state.fsrc;
   try { fx = texOf(state.fsrc); } catch (e) { /* zůstane text */ }
   $('#extFn').innerHTML = texHtml(fx, state.fsrc);
-  $('#extNote').textContent = ex ? ex.note : 'Vyber příklad. Funkce je zadaná jen na části roviny nebo tam není holomorfní.';
+  if (ex) {
+    btn.disabled = false;
+    btn.innerHTML = norm(state.fsrc) === norm(ex.ext) ? 'Vrátit původní' : `Rozšířit na ${texHtml(texOf(ex.ext), ex.extLabel)}`;
+    $('#extNote').textContent = ex.note;
+    return;
+  }
+  // vlastní funkce z pole: numerické rozšíření (AAA, viz extendOwn)
+  const st = ownExtState(), c = state.cont;
+  btn.disabled = !['ok', 'on'].includes(st);
+  btn.textContent = c ? 'Vrátit původní' : 'Rozšířit numericky';
+  $('#extNote').textContent = {
+    ok: 'Tvoje funkce je definovaná jen na části gridu. Rozšíření se spočítá numericky: z hodnot uvnitř se poskládá podíl dvou polynomů a ten se vyhodnotí i venku. Nebo vyber příklad nahoře.',
+    whole: 'Tvoje funkce je definovaná skoro na celé oblasti gridu, není co rozšiřovat. Napiš řadu nebo integrál, třeba Σ zⁿ/n, nebo vyber příklad nahoře.',
+    noholo: 'Tvoje funkce není holomorfní, analytické rozšíření pro ni neexistuje. Vyber příklad nahoře.',
+    wait: 'Počkej, až se funkce dopočítá.',
+    busy: 'Počítám rozšíření…',
+    on: c && `Rozšíření je podíl dvou polynomů stupně ${c.ch.n - 1}, který uvnitř sedí na tvou funkci. Póly našel u pólů funkce, u bodu větvení je seřadil do řezu. Kde si dvě nezávislé aproximace neodpovídají (u řezu, daleko od oblasti), graf zůstane prázdný.`,
+    natural: 'Venku se dvě nezávislé aproximace nikde neshodnou. Funkce má singularitu skoro v každém bodě hranice (přirozená hranice), rozšíření neexistuje.',
+  }[st];
 }
 // oblast, kterou obtáhne přerušovaná hranice: kde je původní funkce definovaná, u příkladu s holo kde je holomorfní
 const extDomain = ex => compile(ex.holo ? `if(${ex.holo}; z)` : ex.f);
@@ -2190,14 +2208,21 @@ function* edgePiecesJob(lines, mapFn, coarse = 1) {
 }
 // přesná hranice oblasti, kde je dom definovaná: rastr 240 uzlů napříč (u drahé funkce 120) a bisekce na každé hraně
 const domainEdge = (dom, mapFn) => runJob(domainEdgeJob(dom, mapFn));
-function* domainEdgeJob(dom, mapFn) {
-  const g = state.grid, RW = rasterW(), RH = Math.max(RW / 6 | 0, Math.min(2 * RW, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
-  const ok = z => { const w = dom(z); return isFinite(w[0]) && isFinite(w[1]); };
-  const inside = new Uint8Array(RW * RH);
+const rasterH = (g, RW) => Math.max(RW / 6 | 0, Math.min(2 * RW, Math.round(RW * (g.y1 - g.y0) / (g.x1 - g.x0))));
+// rastr uzlů přes oblast gridu: 1 tam, kde je dom definovaná
+function* domRasterJob(dom, RW) {
+  const g = { ...state.grid }, RH = rasterH(g, RW), inside = new Uint8Array(RW * RH);
   for (let j = 0; j < RH; j++) {
-    for (let k = j * RW; k < (j + 1) * RW; k++) inside[k] = ok(nodeXY(g, RW, RH, k)) ? 1 : 0;
-    yield 0.25 * (j + 1) / RH;
+    for (let k = j * RW; k < (j + 1) * RW; k++) { const w = dom(nodeXY(g, RW, RH, k)); inside[k] = isFinite(w[0]) && isFinite(w[1]) ? 1 : 0; }
+    yield (j + 1) / RH;
   }
+  return { fsrc: state.fsrc, g, RW, RH, inside };
+}
+let lastDom = null;   // rastr aktuální funkce z posledního výpočtu hranice (rozšíření vlastní funkce ho použije znovu)
+function* domainEdgeJob(dom, mapFn) {
+  const r = yield* scaled(domRasterJob(dom, rasterW()), 0, 0.25), { g, RW, RH, inside } = r;
+  if (dom === FN) lastDom = r;
+  const ok = z => { const w = dom(z); return isFinite(w[0]) && isFinite(w[1]); };
   // body hranice se napřed jen založí a bisekce je doplní po kouscích (čáry z contourLines drží tytéž pole)
   const todo = [];
   const lines = contourLines(RW, RH, inside, (a, b) => { const p = [0, 0]; todo.push([p, a, b]); return p; });
@@ -2237,10 +2262,10 @@ let edgeKey = '';
 const edgeOnEx = () => { const ex = EXTENSIONS[state.extIdx]; return !!ex && norm(state.fsrc) === norm(ex.f); };
 const edgeKeyNow = () => { const g = state.grid; return [state.fsrc, state.extIdx, g.type, g.x0, g.x1, g.y0, g.y1, g.r0, state.tolFactor].join('|'); };
 // bude se hranice počítat znovu? (podle toho přepočet dělí pruh mezi čáry a hranici)
-const needEdge = () => (state.partial || edgeOnEx()) && !(edgeKeyNow() === edgeKey && state.edge);
+const needEdge = () => !state.cont && (state.partial || edgeOnEx()) && !(edgeKeyNow() === edgeKey && state.edge);
 function* edgeJob() {
   const key = edgeKeyNow(), onEx = edgeOnEx();
-  if (!state.partial && !onEx) { state.edge = null; edgeKey = ''; return; }
+  if (state.cont || (!state.partial && !onEx)) { state.edge = null; edgeKey = ''; return; }
   if (key === edgeKey && state.edge) return;
   state.edge = null; edgeKey = '';
   const edge = yield* domainEdgeJob(onEx ? extDomain(EXTENSIONS[state.extIdx]) : FN, edgeMapFn());
@@ -2267,7 +2292,7 @@ function drawEdge(ctx, t, ox, oy, s, brk2) {
 
 // Rozšíření jako růst: v rovině w je rovnou výsledek rozšířené funkce a grid v obou rovinách roste z oblasti, kde
 // původní funkce konverguje, do celé oblasti (dir = +1); zpět se stejně stáhne a pak se vrátí původní funkce (dir = −1)
-function startGrowth(dom, dir, fromBox, toBox, thenSrc, edgeDom = dom) {
+function startGrowth(dom, dir, fromBox, toBox, thenSrc, edgeDom = dom, edge0 = null) {
   const field = growthField(edgeDom), gf = field.at;
   const val = (x, y) => { const w = dom([x, y]); return isFinite(w[0]) && isFinite(w[1]) ? 0 : Math.max(gf(x, y), 1e-4); };
   const fill = z => { const a = new Float32Array(z.length / 2); for (let k = 0; k < z.length; k += 2) a[k >> 1] = val(z[k], z[k + 1]); return a; };
@@ -2284,13 +2309,13 @@ function startGrowth(dom, dir, fromBox, toBox, thenSrc, edgeDom = dom) {
     Lt.cellG[ci * Lt.nv + cj] = m;
   }
   // hranice: na začátku přesná hranice oblasti konvergence, během růstu vrstevnice, na konci splyne s okrajem gridu
-  const edge0 = domainEdge(edgeDom, FN);
+  if (!edge0) edge0 = domainEdge(edgeDom, FN);
   state.ext = { u: 0, p: 0, e: dir > 0 ? 0 : 1, dir, fromBox, toBox, thenSrc, field, edge0, edgeE: -1, edgeNow: null };
   lastTs = performance.now(); requestDraw();
 }
 function extend() {
   const ex = EXTENSIONS[state.extIdx];
-  if (!ex) return;
+  if (!ex) { extendOwn(); return; }
   pause(); finishExtension();
   const dom = compile(ex.f), edgeDom = extDomain(ex), fromBox = state.imgBox && { ...state.imgBox };
   if (norm(state.fsrc) !== norm(ex.ext)) {
@@ -2300,6 +2325,217 @@ function extend() {
   } else {
     startGrowth(dom, -1, fromBox, imageBox(dom), ex.f, edgeDom);
   }
+}
+
+// ---------- rozšíření vlastní funkce: racionální aproximace AAA ----------
+// Řetěz Taylorových řad (Weierstrass) v dvojité přesnosti nestačí: každé přerozvinutí ztratí část číslic a zhruba
+// po dvojnásobné vzdálenosti od singularity zbude šum. Proto AAA (Nakatsukasa, Sète, Trefethen 2018): z hodnot f
+// v oblasti, kde je definovaná, se hladově poskládá racionální funkce r(z) = Σ w_k f_k/(z − z_k) / Σ w_k/(z − z_k)
+// a ta se vyhodnotí i venku. Póly r sednou na póly f, u bodu větvení se seřadí do řezu. Druhá aproximace z každého
+// druhého vzorku slouží jako kontrola: kde se obě neshodnou (u řezu, za přirozenou hranicí), rozšíření se nekreslí.
+
+// nejmenší pravý singulární vektor matice A (m × n po sloupcích, re a im zvlášť): Householderova QR, pak inverzní
+// iterace na R (R^H R x = y bez násobení R^H R, aby se nezhoršila podmíněnost)
+function smallestSingular(Are, Aim, m, n) {
+  for (let k = 0; k < n; k++) {
+    const c = k * m;
+    let nrm = 0;
+    for (let i = k; i < m; i++) nrm += Are[c + i] ** 2 + Aim[c + i] ** 2;
+    nrm = Math.sqrt(nrm);
+    if (!(nrm > 0)) continue;
+    const x0r = Are[c + k], x0i = Aim[c + k], x0 = Math.hypot(x0r, x0i);
+    const pr = x0 ? x0r / x0 : 1, pi = x0 ? x0i / x0 : 0, ar = -pr * nrm, ai = -pi * nrm;
+    Are[c + k] = x0r - ar; Aim[c + k] = x0i - ai;   // v = x − α e₁ (uloží se na místo sloupce k)
+    let vv = 0;
+    for (let i = k; i < m; i++) vv += Are[c + i] ** 2 + Aim[c + i] ** 2;
+    for (let j = k + 1; j < n; j++) {
+      const cj = j * m;
+      let sr = 0, si = 0;
+      for (let i = k; i < m; i++) { sr += Are[c + i] * Are[cj + i] + Aim[c + i] * Aim[cj + i]; si += Are[c + i] * Aim[cj + i] - Aim[c + i] * Are[cj + i]; }
+      sr *= 2 / vv; si *= 2 / vv;
+      for (let i = k; i < m; i++) { Are[cj + i] -= Are[c + i] * sr - Aim[c + i] * si; Aim[cj + i] -= Are[c + i] * si + Aim[c + i] * sr; }
+    }
+    Are[c + k] = ar; Aim[c + k] = ai;
+  }
+  // R_ij = A[i + j·m] pro i ≤ j
+  const Rr = (i, j) => Are[j * m + i], Ri = (i, j) => Aim[j * m + i];
+  const dg = i => { const r = Rr(i, i), q = Ri(i, i); return Math.hypot(r, q) > 1e-290 ? [r, q] : [1e-290, 0]; };
+  let xr = new Float64Array(n).fill(1), xi = new Float64Array(n);
+  for (let it = 0; it < 8; it++) {
+    const yr = new Float64Array(n), yi = new Float64Array(n);
+    for (let i = 0; i < n; i++) {   // R^H y = x
+      let sr = xr[i], si = xi[i];
+      for (let j = 0; j < i; j++) { const a = Rr(j, i), b = -Ri(j, i); sr -= a * yr[j] - b * yi[j]; si -= a * yi[j] + b * yr[j]; }
+      const [a, b0] = dg(i), b = -b0, d = a * a + b * b;
+      yr[i] = (sr * a + si * b) / d; yi[i] = (si * a - sr * b) / d;
+    }
+    const zr = new Float64Array(n), zi = new Float64Array(n);
+    for (let i = n - 1; i >= 0; i--) {   // R z = y
+      let sr = yr[i], si = yi[i];
+      for (let j = i + 1; j < n; j++) { const a = Rr(i, j), b = Ri(i, j); sr -= a * zr[j] - b * zi[j]; si -= a * zi[j] + b * zr[j]; }
+      const [a, b] = dg(i), d = a * a + b * b;
+      zr[i] = (sr * a + si * b) / d; zi[i] = (si * a - sr * b) / d;
+    }
+    let s = 0;
+    for (let i = 0; i < n; i++) s += zr[i] ** 2 + zi[i] ** 2;
+    s = Math.sqrt(s) || 1;
+    for (let i = 0; i < n; i++) { zr[i] /= s; zi[i] /= s; }
+    xr = zr; xi = zi;
+  }
+  return [xr, xi];
+}
+function ratEval(r, x, y) {
+  let nr = 0, ni = 0, dr = 0, di = 0;
+  for (let k = 0; k < r.n; k++) {
+    const dx = x - r.zr[k], dy = y - r.zi[k], den = dx * dx + dy * dy;
+    if (den === 0) return [r.fr[k], r.fi[k]];
+    const cr = dx / den, ci = -dy / den, tr = cr * r.wr[k] - ci * r.wi[k], ti = cr * r.wi[k] + ci * r.wr[k];
+    dr += tr; di += ti; nr += tr * r.fr[k] - ti * r.fi[k]; ni += tr * r.fi[k] + ti * r.fr[k];
+  }
+  const d = dr * dr + di * di;
+  return [(nr * dr + ni * di) / d, (ni * dr - nr * di) / d];
+}
+// AAA: přidává do podpory bod s největší chybou, dokud aproximace nesedí na tol (relativně) nebo nemá mmax členů
+function* aaaJob(P, tol, mmax) {
+  const M = P.length, free = new Uint8Array(M).fill(1), Rr = new Float64Array(M), Ri = new Float64Array(M);
+  let mr = 0, mi = 0, fmax = 0;
+  for (const p of P) { mr += p.f[0] / M; mi += p.f[1] / M; fmax = Math.max(fmax, Math.hypot(p.f[0], p.f[1])); }
+  Rr.fill(mr); Ri.fill(mi);
+  const zr = [], zi = [], fr = [], fi = [];
+  let w = null;
+  mmax = Math.min(mmax, M >> 1);
+  for (let n = 1; n <= mmax; n++) {
+    let j = -1, best = -1;
+    for (let i = 0; i < M; i++) if (free[i]) { const e = Math.hypot(P[i].f[0] - Rr[i], P[i].f[1] - Ri[i]); if (e > best) { best = e; j = i; } }
+    if (n > 1 && best <= tol * fmax) break;
+    free[j] = 0; zr.push(P[j].z[0]); zi.push(P[j].z[1]); fr.push(P[j].f[0]); fi.push(P[j].f[1]);
+    const rows = [];
+    for (let i = 0; i < M; i++) if (free[i]) rows.push(i);
+    const m = rows.length, Are = new Float64Array(m * n), Aim = new Float64Array(m * n);
+    for (let k = 0; k < n; k++) for (let q = 0; q < m; q++) {
+      const p = P[rows[q]], dx = p.z[0] - zr[k], dy = p.z[1] - zi[k], den = dx * dx + dy * dy;
+      const cr = dx / den, ci = -dy / den, ur = p.f[0] - fr[k], ui = p.f[1] - fi[k];
+      Are[k * m + q] = ur * cr - ui * ci; Aim[k * m + q] = ur * ci + ui * cr;
+    }
+    const [wr, wi] = smallestSingular(Are, Aim, m, n);
+    w = { n, zr: zr.slice(), zi: zi.slice(), fr: fr.slice(), fi: fi.slice(), wr, wi };
+    for (const i of rows) { const v = ratEval(w, P[i].z[0], P[i].z[1]); Rr[i] = v[0]; Ri[i] = v[1]; }
+    yield n / mmax;
+  }
+  return w;
+}
+// vzdálenost uzlů rastru od nejbližšího uzlu, kde funkce definovaná není (null, když je definovaná všude)
+function distToOutside(r) {
+  const { g, RW, RH, inside } = r, cw = (g.x1 - g.x0) / RW, ch = (g.y1 - g.y0) / RH, D = new Float64Array(RW * RH);
+  let any = false;
+  for (let k = 0; k < D.length; k++) { D[k] = inside[k] ? 1e20 : 0; any = any || !inside[k]; }
+  if (!any) return null;
+  const row = new Float64Array(RW), col = new Float64Array(RH);
+  for (let j = 0; j < RH; j++) { for (let i = 0; i < RW; i++) row[i] = D[j * RW + i]; const q = edt1d(row, RW, cw); for (let i = 0; i < RW; i++) D[j * RW + i] = q[i]; }
+  for (let i = 0; i < RW; i++) { for (let j = 0; j < RH; j++) col[j] = D[j * RW + i]; const q = edt1d(col, RH, ch); for (let j = 0; j < RH; j++) D[j * RW + i] = Math.sqrt(q[j]); }
+  return D;
+}
+// původní oblast z rastru (rychle, bez drahé funkce): uvnitř, když tam vychází víc než půl z okolních uzlů
+function rasterDom(r) {
+  const { g, RW, RH, inside } = r, cw = (g.x1 - g.x0) / RW, ch = (g.y1 - g.y0) / RH, IN = [0, 0], OUT = [NaN, NaN];
+  return z => {
+    const fx = Math.min(RW - 1.0001, Math.max(0, (z[0] - g.x0) / cw - 0.5)), fy = Math.min(RH - 1.0001, Math.max(0, (z[1] - g.y0) / ch - 0.5));
+    const i = Math.min(RW - 2, fx | 0), j = Math.min(RH - 2, fy | 0), u = fx - i, v = fy - j, k = j * RW + i;
+    const w = (1 - u) * (1 - v) * inside[k] + u * (1 - v) * inside[k + 1] + (1 - u) * v * inside[k + RW] + u * v * inside[k + RW + 1];
+    return w >= 0.5 ? IN : OUT;
+  };
+}
+const sameBox = (a, b) => a.x0 === b.x0 && a.x1 === b.x1 && a.y0 === b.y0 && a.y1 === b.y1;
+
+function* contJob(orig) {
+  const g = { ...state.grid };
+  const r = lastDom && lastDom.fsrc === state.fsrc && sameBox(lastDom.g, g) ? lastDom : yield* scaled(domRasterJob(orig, 120), 0, 0.2);
+  const { RW, RH, inside } = r, cw = (g.x1 - g.x0) / RW, chh = (g.y1 - g.y0) / RH, dist = distToOutside(r);
+  if (!dist) return null;
+  // vzorky: řídká mříž přes oblast a pás uzlů u její hranice (tam je nejvíc vidět, kam funkce chce pokračovat)
+  const st = Math.max(1, Math.round(RW / 20)), cell = Math.hypot(cw, chh), edge = [], pts = [];
+  for (let j = 0; j < RH; j++) for (let i = 0; i < RW; i++) {
+    const k = j * RW + i;
+    if (!inside[k]) continue;
+    if (dist[k] <= 1.6 * cell) edge.push(k);
+    else if (i % st === 0 && j % st === 0) pts.push(k);
+  }
+  const step = Math.max(1, Math.ceil(edge.length / 160));
+  for (let q = 0; q < edge.length; q += step) pts.push(edge[q]);
+  const P = [];
+  for (let q = 0; q < pts.length; q++) {
+    const z = nodeXY(g, RW, RH, pts[q]), f = orig(z);
+    if (isFinite(f[0]) && isFinite(f[1])) P.push({ z, f });
+    if (q % 20 === 19) yield 0.2 + 0.3 * q / pts.length;
+  }
+  if (P.length < 12) return null;
+  const r1 = yield* scaled(aaaJob(P, 1e-11, 60), 0.5, 0.8);
+  const r2 = yield* scaled(aaaJob(P.filter((p, i) => i % 2), 1e-11, 60), 0.8, 1);
+  if (!r1 || !r2) return null;
+  const dom = rasterDom(r);
+  const fn = z => {
+    const a = ratEval(r1, z[0], z[1]);
+    if (isFinite(dom(z)[0])) return a;   // uvnitř sedí na funkci, kontrola jen venku
+    const b = ratEval(r2, z[0], z[1]);
+    return Math.hypot(a[0] - b[0], a[1] - b[1]) <= 1e-3 * (1 + Math.hypot(a[0], a[1])) ? a : [NaN, NaN];
+  };
+  // přirozená hranice: venku se obě aproximace skoro nikde neshodnou
+  let out = 0, got = 0;
+  for (let k = 0; k < inside.length; k += 3) if (!inside[k]) {
+    out++;
+    const w = fn(nodeXY(g, RW, RH, k));
+    if (isFinite(w[0]) && isFinite(w[1])) got++;
+  }
+  return { fn, dom, n: r1.n, natural: got < 0.05 * out };
+}
+
+// stav tlačítka u vlastní funkce
+function ownExtState() {
+  if (state.cont) return 'on';
+  if (contGen) return 'busy';
+  if (naturalSrc === state.fsrc) return 'natural';
+  if (job) return 'wait';
+  if (!(state.holoFr >= 0.95)) return 'noholo';
+  return state.partial ? 'ok' : 'whole';
+}
+let contGen = null, naturalSrc = null;
+function extendOwn() {
+  pause(); finishExtension();
+  const c = state.cont;
+  if (c) {   // zpátky: grid se stáhne do původní oblasti a vrátí se původní funkce
+    startGrowth(c.dom, -1, state.imgBox && { ...state.imgBox }, c.fromBox, c.src, c.dom, c.edge0);
+    return;
+  }
+  if (ownExtState() !== 'ok') return;
+  const src = state.fsrc, orig = FN, gen = contJob(orig);
+  contGen = gen; syncExtUI(); showProgress(0);
+  const step = () => {
+    if (contGen !== gen) return;
+    const t0 = performance.now();
+    let r;
+    do r = gen.next(); while (!r.done && performance.now() - t0 < 30);
+    if (!r.done) { showProgress(r.value); setTimeout(step, 0); return; }
+    contGen = null; showProgress(null);
+    if (FN !== orig || state.fsrc !== src) return;   // mezitím jiná funkce
+    if (r.value && r.value.natural) { naturalSrc = src; syncExtUI(); }
+    else if (r.value) applyCont(r.value, src);
+    else { syncExtUI(); $('#extNote').textContent = 'Aproximaci se nepodařilo sestavit, funkce uvnitř oblasti asi není holomorfní.'; }
+  };
+  setTimeout(step, 0);
+}
+function applyCont(ch, src) {
+  const fromBox = state.imgBox && { ...state.imgBox }, edge = state.edge || [];
+  FN = ch.fn;
+  state.cont = { ch, src, fromBox, dom: ch.dom, edge0: null };
+  recomputeAll(); finishJob();
+  // přerušovaná hranice původní oblasti, obraz už rozšířenou funkcí
+  state.cont.edge0 = edge.map(p => {
+    const f = new Float64Array(p.z.length);
+    for (let k = 0; k < p.z.length; k += 2) { const w = FN([p.z[k], p.z[k + 1]]); f[k] = w[0]; f[k + 1] = w[1]; }
+    return { z: p.z, f };
+  });
+  startGrowth(ch.dom, +1, fromBox, state.imgBox && { ...state.imgBox }, null, ch.dom, state.cont.edge0);
+  syncExtUI();
 }
 
 // ---------- vstup myší na levé rovině ----------
